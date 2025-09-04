@@ -9,6 +9,9 @@ use Inertia\Response;
 
 class CardGameController extends Controller
 {
+    public function createRoom(){
+        return Inertia::render('cardgame/CreateRoom');
+    }
     public function board(): Response{
         $deck = session('deck');
         if(!$deck){
@@ -18,7 +21,9 @@ class CardGameController extends Controller
             'deck' => $deck,
         ]);
     }
-
+    public function saveRoom(){
+        
+    }
     public function shuffle(): RedirectResponse
     {
         $deck = session('deck') ?? $this->buildDeck();

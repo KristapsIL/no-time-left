@@ -17,6 +17,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/board/shuffle', [CardGameController::class, 'shuffle'])->name('board.shuffle');
     Route::post('/board/reset', [CardGameController::class, 'reset'])->name('board.reset');
 
+    Route::get('/createRoom', [CardGameController::class, 'createRoom'])->name('createRoom');
 });
 
 require __DIR__.'/settings.php';
