@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\CardGameController;
+use App\Http\Controllers\RoomController;
 
 Route::get('/', function () {
     return Inertia::render('welcome');
@@ -17,7 +18,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/board/shuffle', [CardGameController::class, 'shuffle'])->name('board.shuffle');
     Route::post('/board/reset', [CardGameController::class, 'reset'])->name('board.reset');
 
-    Route::get('/createRoom', [CardGameController::class, 'createRoom'])->name('createRoom');
+    Route::get('/createRoom', [RoomController::class, 'createRoom'])->name('createRoom');
+    Route::post('/storeRules', [RoomController::class, 'store']);
 });
 
 require __DIR__.'/settings.php';
