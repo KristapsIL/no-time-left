@@ -18,6 +18,7 @@ return new class extends Migration
             $table->boolean('public')->default(true);
             $table->json('rules');
             $table->foreignId('created_by');
+            $table->json('deck')->nullable();
             $table->timestamps();
         });
     }

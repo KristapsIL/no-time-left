@@ -2,9 +2,12 @@ import React from 'react';
 import { Head, router } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 
-type Props = { deck: string[]};
+type Props = { 
+    room: { id: number; code: string; rules: string[] };
+    deck: string[];
+};
 
-function Board({ deck }: Props){
+function Board({ room, deck }: Props){
     return (
     <AppLayout>
         <Head title="Board" />
@@ -12,7 +15,7 @@ function Board({ deck }: Props){
             <div className="flex gap-2">
                 <button
                     className="px-3 py-1 rounded bg-lime-500 text-white"
-                    onClick={() => router.post('/board/shuffle')}>
+                    onClick={() => router.post(`/board/${room.id}/shuffle`)}>
                     Shuffle
                 </button>
             </div>

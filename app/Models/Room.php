@@ -10,6 +10,7 @@ class Room extends Model
 
     protected $casts = [
         'rules' => 'array',
+        'deck' => 'array',
     ];
 
     public function owner()

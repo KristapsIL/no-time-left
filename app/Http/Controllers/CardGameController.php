@@ -13,27 +13,35 @@ class CardGameController extends Controller
     public function board(Request $request, $roomId): Response{
         $room = Room::findOrFail($roomId);
 
-        $deck = session('deck');
-        if(!$deck){
-            $deck = $this->buildDeck();
+        if (!$room->deck || empty($room->deck)) {
+            $room->deck = $this->buildDeck();
+            $room->save();
         }
         return Inertia::render('cardgame/Board', [
             'room' => $room,
             'rules' => $room->rules,
-            'deck' => $deck,
+            'deck' => $room->deck,
         ]);
     }
-    public function shuffle(): RedirectResponse
+    public function shuffle($roomId)
     {
-        $deck = session('deck') ?? $this->buildDeck();
+        $room = Room::findOrFail($roomId);
+        $deck = $room->deck;
+
         shuffle($deck);
-        session(['deck' => $deck]);
+
+        $room->deck = $deck;
+        $room->save();
+
         return back();
     }
 
-    public function reset(): RedirectResponse
+    public function reset($roomId)
     {
-        session()->forget('deck');
+        $room = Room::findOrFail($roomId);
+        $room->deck = $this->buildDeck();
+        $room->save();
+
         return back();
     }
 

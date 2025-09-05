@@ -14,9 +14,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('dashboard');
     })->name('dashboard');
 
-    Route::get('/board', [CardGameController::class, 'board'])->name('board');
-    Route::post('/board/shuffle', [CardGameController::class, 'shuffle'])->name('board.shuffle');
-    Route::post('/board/reset', [CardGameController::class, 'reset'])->name('board.reset');
+    Route::get('/board/{roomId}', [CardGameController::class, 'board'])->name('board');
+    Route::post('/board/{roomId}/shuffle', [CardGameController::class, 'shuffle'])->name('board.shuffle');
+    Route::post('/board/{roomId}/reset', [CardGameController::class, 'reset'])->name('board.reset');
 
     Route::get('/createRoom', [RoomController::class, 'createRoom'])->name('createRoom');
     Route::post('/storeRules', [RoomController::class, 'store']);
