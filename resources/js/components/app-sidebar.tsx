@@ -5,7 +5,7 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, Sid
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { LayoutGrid, Gamepad2} from 'lucide-react';
+import { LayoutGrid, Gamepad2, Gamepad} from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -18,7 +18,13 @@ const mainNavItems: NavItem[] = [
         title: 'Create Room',
         href: '/createRoom',
         icon: Gamepad2,
+    },
+    {
+        title: 'Find a Room',
+        href: '/findRoom',
+        icon: Gamepad,
     }
+
 ];
 
 const footerNavItems: NavItem[] = [

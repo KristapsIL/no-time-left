@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Room;
 use Illuminate\Http\Request;
-use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Illuminate\Support\Str;
 use Inertia\Response;
@@ -23,7 +22,7 @@ class RoomController extends Controller
             'max_players' => ['required', 'integer', 'min:2', 'max:4'],
             'rules' => ['nullable', 'array'],
         ]);
-        Room::create([
+        $room = Room::create([
             'room_code' => $this->uniqueCode(),
             'public' => $validated['public'],
             'max_players' => $validated['max_players'],
@@ -31,7 +30,7 @@ class RoomController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
-        return redirect()->route('board');
+        return redirect()->route('board', ['roomId' => $room->id]);
     }
 
     private function uniqueCode(): string
@@ -41,6 +40,10 @@ class RoomController extends Controller
         } while (Room::where('room_code', $code)->exists());
 
         return $code;
+    }
+    public function findRoom(){
+        $rooms = Room::all();
+        return Inertia::render('cardgame/FindRoom', ['rooms' => $rooms]);
     }
 
     public function edit(Room $room)

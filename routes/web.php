@@ -20,6 +20,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/createRoom', [RoomController::class, 'createRoom'])->name('createRoom');
     Route::post('/storeRules', [RoomController::class, 'store']);
+
+    Route::get('/findRoom', [RoomController::class, 'findRoom'])->name('findRoom');
 });
 
 require __DIR__.'/settings.php';

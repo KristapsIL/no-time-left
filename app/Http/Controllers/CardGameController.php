@@ -6,15 +6,20 @@ use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Models\Room;
 
 class CardGameController extends Controller
 {
-    public function board(): Response{
+    public function board(Request $request, $roomId): Response{
+        $room = Room::findOrFail($roomId);
+
         $deck = session('deck');
         if(!$deck){
             $deck = $this->buildDeck();
         }
         return Inertia::render('cardgame/Board', [
+            'room' => $room,
+            'rules' => $room->rules,
             'deck' => $deck,
         ]);
     }
