@@ -15,7 +15,7 @@ function Board({ room, deck }: Props){
             <div className="flex gap-2">
                 <button
                     className="px-3 py-1 rounded bg-lime-500 text-white"
-                    onClick={() => router.post(`/board/${room.id}/shuffle`)}>
+                    onClick={() => router.post(`/board/${room.id}/shuffle`)}> 
                     Shuffle
                 </button>
             </div>
