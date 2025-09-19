@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('room_user', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('room_id')->unique()->constrained()->cascadeOnDelete();
+            $table->foreignId('room_id')->constrained()->cascadeOnDelete();
             $table->foreignId('user_id')->unique()->constrained()->cascadeOnDelete();
             $table->string('role')->default('player');
             $table->timestamps();

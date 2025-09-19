@@ -19,6 +19,7 @@ return new class extends Migration
             $table->json('rules');
             $table->foreignId('created_by');
             $table->json('deck')->nullable();
+            $table->json('used_cards')->nullable();
             $table->timestamps();
         });
     }

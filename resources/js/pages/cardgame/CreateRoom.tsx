@@ -3,6 +3,7 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, router } from "@inertiajs/react";
 
 
+
 function CreateRoom() {
     const [isPublic, setIsPublic] = useState(true);
     const [maxPlayers, setMaxPlayers] = useState(2);

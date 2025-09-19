@@ -29,7 +29,7 @@ function FindRoom({ rooms }: Props) {
                                 <button
                                     type="button"
                                     className="px-3 py-1 bg-indigo-600 text-white rounded"
-                                    onClick={() => router.visit(`/board/${room.id}`)}>
+                                    onClick={() => router.visit(`/joinroom/${room.id}`)}>
                                     Join
                                 </button>
                             </div>
