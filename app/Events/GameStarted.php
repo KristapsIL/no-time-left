@@ -18,17 +18,19 @@ class GameStarted implements ShouldBroadcast
     public $roomId;
     public $player_hands;
     public $deck;
+    public $used_cards;
 
-    public function __construct($roomId, $player_hands, $deck)
+    public function __construct($roomId, $player_hands, $deck, $used_cards = [])
     {
         $this->roomId = $roomId;
         $this->player_hands = $player_hands;
         $this->deck = $deck;
+        $this->used_cards = $used_cards;
     }
 
     public function broadcastOn()
     {
-        return ['room-' . $this->roomId];
+        return new PresenceChannel('room-' . $this->roomId);
     }
 
     public function broadcastAs()
