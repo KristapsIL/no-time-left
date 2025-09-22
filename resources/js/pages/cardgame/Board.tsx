@@ -178,7 +178,6 @@ function Board(_initialProps: Props) {
             headers: { 'X-Socket-ID': (window as any).Echo?.socketId?.() ?? '' },
             onSuccess: () => {
                 console.log(' Start game request successful');
-                // Don't reload! Let Pusher events update the UI
             },
             onError: (errors) => {
                 console.error('❌ Start game failed:', errors);
@@ -186,7 +185,6 @@ function Board(_initialProps: Props) {
                 alert('Failed to start game: ' + (errors.message || 'Unknown error'));
             },
             onFinish: () => {
-                // Reset loading state after a delay if no Pusher event received
                 setTimeout(() => setIsStartingGame(false), 3000);
             }
         });
@@ -202,7 +200,7 @@ function Board(_initialProps: Props) {
   };
 
   const isValidPlay = (card: string, topCard: string | null): boolean => {
-    if (!topCard) return true; // first card is always valid
+    if (!topCard) return true;
 
     const cardValue = card.slice(0, -1);
     const cardSuit = card.slice(-1);
@@ -214,7 +212,6 @@ function Board(_initialProps: Props) {
   };
 
   const playCard = async (card: string) => {
-    // Optimistic update
     const previousHand = hand;
     const previousTopCard = topCard;
     setHand(prev => prev.filter(c => c !== card));
@@ -231,28 +228,23 @@ function Board(_initialProps: Props) {
       });
 
       if (!response.ok) {
-        // Handle error response
         let errorMessage = `Error ${response.status}`;
         try {
           const errorData = await response.json();
           errorMessage = errorData.error || errorData.message || errorMessage;
         } catch {
-          // If JSON parsing fails, use the status code
         }
         throw new Error(errorMessage);
       }
 
       console.log(`Card ${card} confirmed by server`);
-      // Success - the real-time update will come via Pusher
       
     } catch (error) {
       console.error('Invalid move:', error);
       
-      // Rollback optimistic update
       setHand(previousHand);
       setTopCard(previousTopCard);
       
-      // Show user-friendly error
       const errorMessage = error instanceof Error ? error.message : 'Invalid move! You can\'t play that card.';
       alert(errorMessage);
     }
@@ -264,6 +256,9 @@ function Board(_initialProps: Props) {
     }
     playCard(card);
   };
+  const pickup = () => {
+    router.put(`/board/${room.id}/pickup`, {});
+  }
 
   console.log('player_hands:', room.player_hands);
   console.log('userId:', userId);
@@ -376,6 +371,25 @@ function Board(_initialProps: Props) {
             )}
             {hand.length === 0 && gameStatus === 'in_progress' && (
               <p className="text-muted-foreground">No cards in hand!</p>
+            )}
+          </div>
+        </div>
+        <div className="bg-background rounded-lg border p-4">
+            <h2 className="text-lg font-semibold mb-2">Pick Up</h2>
+          <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => pickup()}
+                disabled={gameStatus !== 'in_progress'}
+                className={`px-3 py-2 bg-neutral-100 dark:bg-neutral-800 border border-input rounded-lg text-foreground transition-colors ${
+                  gameStatus === 'in_progress' 
+                    ? 'hover:bg-blue-100 dark:hover:bg-blue-700 cursor-pointer' 
+                    : 'opacity-50 cursor-not-allowed'
+                }`}
+              >
+                {deck[0]}
+              </button>
+            {hand.length === 0 && gameStatus === 'waiting' && (
+              <p className="text-muted-foreground">Waiting for game to start...</p>
             )}
           </div>
         </div>

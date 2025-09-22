@@ -27,6 +27,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/board/{roomId}/reset', [CardGameController::class, 'reset'])->name('board.reset');
     Route::post('/board/{roomId}/start-game', [CardGameController::class, 'startGame'] )->name('startGame');
     Route::post('/board/{roomId}/play-card', [CardGameController::class, 'playCard']);
+    Route::put('/board/{roomId}/pickup', [CardGameController::class, 'pickUpCard']);
 
     Route::get('/createRoom', [RoomController::class, 'createRoom'])->name('createRoom');
     Route::post('/storeRules', [RoomController::class, 'store'])->name('storeRules');
