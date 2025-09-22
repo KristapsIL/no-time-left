@@ -13,6 +13,7 @@ return new class extends Migration
     {
         Schema::create('rooms', function (Blueprint $table) {
             $table->id();
+            $table->string('room_name');
             $table->string('room_code')->unique();
             $table->integer('max_players');
             $table->boolean('public')->default(true);

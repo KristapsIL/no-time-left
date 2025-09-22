@@ -29,12 +29,18 @@ function CreateRoom() {
             <Head title="Create Room" />
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
                 <div>
-                <label className="block mb-1">Public Room?</label>
-                <input
-                    type="checkbox"
-                    checked={isPublic}
-                    onChange={(e) => setIsPublic(e.target.checked)}
-                />
+                    <label className="block mb-1">Room Name</label>
+                    <input
+                        type="input" 
+                    />
+                </div>
+                <div>
+                    <label className="block mb-1">Public Room?</label>
+                    <input
+                        type="checkbox"
+                        checked={isPublic}
+                        onChange={(e) => setIsPublic(e.target.checked)}
+                    />
                 </div>
 
                 <div>

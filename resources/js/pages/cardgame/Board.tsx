@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import RoomChat from '@/components/RoomChat';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, Spade } from 'lucide-react';
 import Echo from 'laravel-echo';
 
 type Props = { 
@@ -386,7 +386,6 @@ function Board(_initialProps: Props) {
                     : 'opacity-50 cursor-not-allowed'
                 }`}
               >
-                {deck[0]}
               </button>
             {hand.length === 0 && gameStatus === 'waiting' && (
               <p className="text-muted-foreground">Waiting for game to start...</p>

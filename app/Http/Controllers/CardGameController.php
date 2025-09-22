@@ -176,7 +176,7 @@ class CardGameController extends Controller
         $currentIndex = array_search($room->current_turn, $players);
         $nextIndex = ($currentIndex + 1) % count($players);
         $room->current_turn = $players[$nextIndex];
-        
+
         $room->save();
 
         try {
@@ -207,6 +207,10 @@ class CardGameController extends Controller
     public function pickUpCard(Request $request, $roomId){
         $userId = $request->user()->id;
         $room = Room::findOrFail($roomId);
+
+        if($userId === $room->current_turn){
+            return response()->json(['error' => 'not your turn'], 422);
+        }
 
         $hands = $room->player_hands;
         $deck = $room->deck;
