@@ -5,6 +5,7 @@ import { Head, router } from "@inertiajs/react";
 
 
 function CreateRoom() {
+    const [Name, setName] =  useState<string>('');
     const [isPublic, setIsPublic] = useState(true);
     const [maxPlayers, setMaxPlayers] = useState(2);
     const [rules, setRules] = useState<string[]>([]);
@@ -18,6 +19,7 @@ function CreateRoom() {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         router.post("/storeRules", {
+        name: Name,
         public: isPublic,
         max_players: maxPlayers,
         rules: rules,
@@ -32,6 +34,7 @@ function CreateRoom() {
                     <label className="block mb-1">Room Name</label>
                     <input
                         type="input" 
+                        onChange={(e) => setName(e.target.value)}
                     />
                 </div>
                 <div>
