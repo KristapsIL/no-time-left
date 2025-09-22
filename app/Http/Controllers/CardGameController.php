@@ -116,13 +116,14 @@ class CardGameController extends Controller
             $usedCards  = [$firstCard];
 
             $room->fill([
-                'player_hands'    => $hands,
-                'game_status'     => 'in_progress',
+                'player_hands' => $hands,
+                'game_status' => 'in_progress',
+                'current_turn' => $room->players[0]->id,
                 'game_started_at' => now(),
             ])->save();
 
             $this->updateDeckState($room, $deck, $usedCards);
-
+            
             return [$room, $hands, $deck, $usedCards];
         });
 
@@ -146,6 +147,11 @@ class CardGameController extends Controller
         $card = $request->input('card');
 
         $room = Room::findOrFail($roomId);
+
+        if($userId === $room->current_turn){
+            return response()->json(['error' => 'not your turn'], 422);
+        }
+
         $hand = $room->player_hands[$userId] ?? [];
 
         if (!in_array($card, $hand)) {
@@ -166,6 +172,11 @@ class CardGameController extends Controller
         $usedCards[] = $card;
         $room->used_cards = $usedCards;
 
+        $players = $room->players->pluck('id')->toArray();
+        $currentIndex = array_search($room->current_turn, $players);
+        $nextIndex = ($currentIndex + 1) % count($players);
+        $room->current_turn = $players[$nextIndex];
+        
         $room->save();
 
         try {
@@ -204,7 +215,7 @@ class CardGameController extends Controller
         $hands[$userId][] = $card[0];
 
         $room->player_hands = $hands; 
-        
+
         $this->updateDeckState($room, $deck);
         $room->save();
     }

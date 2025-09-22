@@ -13,9 +13,10 @@ return new class extends Migration
     {
         Schema::table('rooms', function (Blueprint $table) {
             $table->enum('game_status', ['waiting', 'starting', 'in_progress', 'finished'])->default('waiting');
-            $table->json('player_hands')->nullable(); // Store each player's hand
+            $table->json('player_hands')->nullable(); 
             $table->integer('cards_per_player')->default(7);
             $table->timestamp('game_started_at')->nullable();
+            $table->foreignId('current_turn')->nullable();
         });
     }
 
