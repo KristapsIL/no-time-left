@@ -386,6 +386,7 @@ function Board(_initialProps: Props) {
                     : 'opacity-50 cursor-not-allowed'
                 }`}
               >
+                🂠
               </button>
             {hand.length === 0 && gameStatus === 'waiting' && (
               <p className="text-muted-foreground">Waiting for game to start...</p>
