@@ -27,7 +27,7 @@ class RoomController extends Controller
             'rules' => ['nullable', 'array'],
         ]);
         $room = Room::create([
-            'room_code' => $validated['room_name'],
+            'room_name' => $validated['room_name'],
             'room_code' => $this->uniqueCode(),
             'public' => $validated['public'],
             'max_players' => $validated['max_players'],

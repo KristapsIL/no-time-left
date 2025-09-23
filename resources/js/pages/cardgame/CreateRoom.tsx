@@ -19,7 +19,7 @@ function CreateRoom() {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         router.post("/storeRules", {
-        name: Name,
+        room_name: Name,
         public: isPublic,
         max_players: maxPlayers,
         rules: rules,
@@ -33,8 +33,12 @@ function CreateRoom() {
                 <div>
                     <label className="block mb-1">Room Name</label>
                     <input
-                        type="input" 
+                        type="text" 
+                        value={Name}  // bind the value to state
                         onChange={(e) => setName(e.target.value)}
+                        className="border px-2 py-1 rounded w-full"
+                        placeholder="Enter room name"
+                        required
                     />
                 </div>
                 <div>
