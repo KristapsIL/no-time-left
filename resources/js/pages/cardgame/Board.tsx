@@ -73,6 +73,42 @@ export default function Board() {
   const roomChannelRef = useRef<any>(null);
   const privateChannelRef = useRef<any>(null);
 
+
+  
+
+  // Helper: unique members by id/user_id
+  function uniqById(arr: any[]) {
+    const m = new Map<string | number, any>();
+    for (const p of arr) m.set(p.id ?? p.user_id ?? p, p);
+    return Array.from(m.values());
+  }
+    useEffect(() => {
+        const fetchState = async () => {
+            try {
+                const res = await fetch(`/board/${room.id}/resync-state`, {
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                        'X-Socket-Id': (echo as any)?.socketId?.() ?? '',
+                    },
+                });
+
+                if (!res.ok) throw new Error('Failed to resync');
+
+                const data = await res.json();
+
+                setHand(Array.isArray(data.hand) ? data.hand : []);
+                setHandCounts(data.hand_counts ?? {});
+                setDeckCount(data.deck_count ?? 0);
+                setTopCard(data.used_cards?.length ? data.used_cards.at(-1)! : null);
+                setCurrentTurn(data.current_turn ?? null);
+            } catch (err) {
+                console.error('Resync failed:', err);
+            }
+        };
+
+        fetchState();
+    }, [room.id]);
+
   // --- Presence room channel: subscribe once per room.id
   useEffect(() => {
     if (!echo) return;
