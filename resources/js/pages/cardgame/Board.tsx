@@ -73,9 +73,6 @@ export default function Board() {
   const roomChannelRef = useRef<any>(null);
   const privateChannelRef = useRef<any>(null);
 
-
-  
-
   // Helper: unique members by id/user_id
   function uniqById(arr: any[]) {
     const m = new Map<string | number, any>();
