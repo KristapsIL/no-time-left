@@ -89,23 +89,33 @@ class CardGameController extends Controller
         [$room, $hands, $deck, $usedCards, $players] = DB::transaction(function () use ($roomId, $userId) {
             $room = Room::whereKey($roomId)->lockForUpdate()->firstOrFail();
 
+            
             $isMember = $room->players()->whereKey($userId)->exists();
-            if (!$isMember) abort(403, 'You must join this room before starting the game.');
-            if ($room->game_status === 'in_progress') abort(409, 'Game already started');
+            if (!$isMember) {
+                throw new \Exception('You must join this room before starting the game.');
+            }
 
+            if ($room->game_status === 'in_progress') {
+                 throw new \Exception('You must join this room before starting the game.');
+            }
             $players = $room->players()
                 ->orderBy('room_user.created_at', 'asc')
                 ->get();
 
-            if ($players->count() < 2) abort(422, 'Need at least 2 players to start');
+            if ($players->count() < 2) {
+                 throw new \Exception('You must join this room before starting the game.');
+            }
+
 
             $deck = $room->deck ?: $this->buildDeck();
             shuffle($deck);
 
             $cardsPerPlayer = $room->cards_per_player ?? 6;
+
             if ($players->count() * $cardsPerPlayer > count($deck)) {
-                abort(422, 'Not enough cards for all players');
+                 throw new \Exception('You must join this room before starting the game.');
             }
+
 
             $hands = [];
             foreach ($players as $player) {
