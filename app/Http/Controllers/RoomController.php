@@ -7,9 +7,8 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
-use App\Models\RoomUser;
-use Inertia\Response;
-use app\Models\User;
+use App\Events\HandSynced;
+
 
 
 class RoomController extends Controller
@@ -73,29 +72,16 @@ class RoomController extends Controller
         $request->user()->rooms()->detach($roomId);
         return redirect()->route('findRoom');
     }
-
-
-
-
-    public function edit(Room $room)
+    public function resyncHand(Request $request, Room $room)
     {
-        //
-    }
+        $userId = $request->user()->id;
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, Room $room)
-    {
-        //
-    }
+        broadcast(new HandSynced(
+            userId: $userId,
+            hand: $room->player_hands[$userId] ?? []
+        ));
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Room $room)
-    {
-        //
+        return response()->noContent();
     }
     public function test(){
         return Inertia::render('TestEvent');

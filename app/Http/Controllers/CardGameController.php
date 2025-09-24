@@ -10,11 +10,9 @@ use App\Models\Room;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-// Events (make sure these exist with the sanitized payloads we discussed)
 use App\Events\GameStarted;
 use App\Events\CardPlayed;
-use App\Events\HandSynced; // private per-user hand sync
-// use App\Events\CardPickedUp; // (optional) if you add a separate event
+use App\Events\HandSynced;
 
 class CardGameController extends Controller
 {
@@ -118,50 +116,41 @@ class CardGameController extends Controller
             $firstCard = array_shift($deck);
             $usedCards = [$firstCard];
 
-            $room->fill([
-                'player_hands'    => $hands,
-                'game_status'     => 'in_progress',
-                'current_turn'    => $players[0]->id,
-                'game_started_at' => now(),
-            ])->save();
+            $room->player_hands    = $hands;
+            $room->game_status     = 'in_progress';
+            $room->current_turn    = $players->first()->id;
+            $room->game_started_at = now();
+            $room->save();
 
             $this->updateDeckState($room, $deck, $usedCards);
 
             return [$room, $hands, $deck, $usedCards, $players];
         });
 
-        // Build counts & deck size for sanitized broadcast
         $handCounts = [];
         foreach ($hands as $pid => $h) $handCounts[$pid] = count($h);
         $deckCount = count($deck);
 
-        try {
-            // presence — to all room members (sanitized)
-            broadcast(new GameStarted(
-                roomId:        $room->id,
-                handCounts:    $handCounts,
-                usedCards:     $usedCards,
-                turnPlayerId:  $room->current_turn,
-                deckCount:     $deckCount
-            ));
-        } catch (\Exception $e) {
-            Log::error('Failed to broadcast game started: ' . $e->getMessage());
-        }
+        // Presence-safe broadcast
+        broadcast(new GameStarted(
+            roomId:       $room->id,
+            handCounts:   $handCounts,
+            usedCards:    $usedCards,
+            turnPlayerId: $room->current_turn,
+            deckCount:    $deckCount
+        ));
 
-        // private — send exact hand to each player
+        // Private hand sync
         foreach ($players as $p) {
-            try {
-                broadcast(new HandSynced(
-                    userId: $p->id,
-                    hand:   $hands[(string)$p->id]
-                ));
-            } catch (\Exception $e) {
-                Log::error("Failed to sync hand to user {$p->id}: " . $e->getMessage());
-            }
+            broadcast(new HandSynced(
+                userId: $p->id,
+                hand:   $hands[(string)$p->id]
+            ));
         }
 
         return response()->noContent();
     }
+
 
     public function updateDeckState(Room $room, array $deck, array $usedCards): void
     {
@@ -173,25 +162,24 @@ class CardGameController extends Controller
 
     public function playCard(Request $request, int $roomId)
     {
-        $request->validate(['card' => ['required', 'string']]);
+        $request->validate([
+            'card' => ['required', 'string', 'regex:/^(?:[2-9]|10|[JQKA])-[\x{2660}\x{2665}\x{2666}\x{2663}]$/u'],
+        ]);
+
         $userId = $request->user()->id;
         $card   = (string) $request->input('card');
 
-        // Do the mutation atomically
-        [$room, $actingHand, $usedCards, $handCounts, $deckCount, $turnPlayerId] =
+        [$roomIdOut, $actingHand, $usedCards, $handCounts, $deckCount, $turnPlayerId, $gameStatus] =
             DB::transaction(function () use ($roomId, $userId, $card) {
+
                 $room = Room::whereKey($roomId)->lockForUpdate()->firstOrFail();
 
-                if ($userId !== $room->current_turn) {
-                    abort(422, 'Not your turn');
-                }
+                if ($userId !== $room->current_turn) abort(422, 'Not your turn');
 
                 $hands = $room->player_hands ?? [];
                 $hand  = $hands[(string)$userId] ?? [];
 
-                if (!in_array($card, $hand, true)) {
-                    abort(422, 'You do not have that card in your hand');
-                }
+                if (!in_array($card, $hand, true)) abort(422, 'You do not have that card in your hand');
 
                 $usedCards = $room->used_cards ?? [];
                 $topCard   = !empty($usedCards) ? $usedCards[array_key_last($usedCards)] : null;
@@ -200,69 +188,64 @@ class CardGameController extends Controller
                     abort(422, 'Invalid play - card does not match suit or value');
                 }
 
-                // Remove exactly one occurrence
                 $idx = array_search($card, $hand, true);
-                if ($idx === false) {
-                    abort(422, 'Card not found in your hand');
-                }
                 unset($hand[$idx]);
-                $hand = array_values($hand);
-                $hands[(string)$userId] = $hand;
+                $hands[(string)$userId] = array_values($hand);
 
-                // Push to used/discard
                 $usedCards[] = $card;
+                $usedCards   = array_values($usedCards);
 
-                // Advance turn in original seating order
                 $players = $room->players()
                     ->orderBy('room_user.created_at', 'asc')
                     ->pluck('users.id')
                     ->toArray();
 
                 $currentIndex = array_search($room->current_turn, $players, true);
-                $nextIndex    = ($currentIndex + 1) % count($players);
-                $room->current_turn = $players[$nextIndex];
+                if ($currentIndex === false) $currentIndex = 0;
+                $nextIndex  = (count($players) > 0) ? (($currentIndex + 1) % count($players)) : 0;
+                $nextTurn   = $players[$nextIndex] ?? $room->current_turn;
 
-                // Persist
                 $room->player_hands = $hands;
                 $room->used_cards   = $usedCards;
+                $room->game_status  = (count($hand) === 0) ? 'finished' : 'in_progress';
+                $room->current_turn = $room->game_status === 'finished' ? null : $nextTurn;
+
                 $room->save();
 
-                // Derived data for broadcast
                 $handCounts = [];
                 foreach ($hands as $pid => $h) $handCounts[$pid] = count($h);
-                $deckCount  = count($room->deck);
+                $deckCount = count($room->deck);
 
-                return [$room, $hand, $usedCards, $handCounts, $deckCount, $room->current_turn];
+                return [
+                    $room->id,
+                    $hand,
+                    $usedCards,
+                    $handCounts,
+                    $deckCount,
+                    $room->current_turn,
+                    $room->game_status,
+                ];
             });
 
-        // Broadcasts outside the transaction to release lock sooner
-        try {
-            // presence — sanitized for all
-            broadcast(new CardPlayed(
-                roomId:        $room->id,
-                userId:        $userId,
-                card:          $card,
-                usedCards:     $usedCards,
-                handCounts:    $handCounts,
-                turnPlayerId:  $turnPlayerId,
-                deckCount:     $deckCount
-            ))->toOthers(); // excludes the initiator if X-Socket-Id header was sent
-        } catch (\Exception $e) {
-            Log::error('Failed to broadcast card played event: ' . $e->getMessage());
-        }
+        broadcast(new CardPlayed(
+            roomId:       $roomIdOut,
+            userId:       $userId,
+            card:         $card,
+            usedCards:    $usedCards,
+            handCounts:   $handCounts,
+            turnPlayerId: $turnPlayerId,
+            deckCount:    $deckCount
+        ))->toOthers();
 
-        try {
-            // private — exact hand to the acting user (keeps client in sync even if optimistic)
-            broadcast(new HandSynced(
-                userId: $userId,
-                hand:   $actingHand
-            ));
-        } catch (\Exception $e) {
-            Log::error("Failed to hand-sync user {$userId}: " . $e->getMessage());
-        }
+        broadcast(new HandSynced(
+            userId: $userId,
+            hand:   $actingHand
+        ));
 
         return response()->noContent();
     }
+
+
 
     protected function isValidPlay(string $card, string $topCard): bool
     {
@@ -291,29 +274,19 @@ class CardGameController extends Controller
             DB::transaction(function () use ($roomId, $userId) {
                 $room = Room::whereKey($roomId)->lockForUpdate()->firstOrFail();
 
-                if ($userId !== $room->current_turn) {
-                    abort(422, 'Not your turn');
-                }
+                if ($userId !== $room->current_turn) abort(422, 'Not your turn');
 
                 $hands = $room->player_hands ?? [];
                 $deck  = $room->deck ?? [];
 
-                if (empty($deck)) {
-                    abort(422, 'No more cards in deck');
-                }
+                if (empty($deck)) abort(422, 'No more cards in deck');
 
-                // Draw one card
                 $drawn = array_shift($deck);
                 $hands[(string)$userId][] = $drawn;
 
-                // Persist
                 $room->player_hands = $hands;
                 $this->updateDeckState($room, $deck, $room->used_cards ?? []);
                 $room->save();
-
-                // NOTE: decide your rule: does pickup end the turn?
-                // If yes, rotate here similar to playCard and set $room->current_turn accordingly.
-                // For now, we keep the same current_turn (as in your original code).
 
                 $handCounts = [];
                 foreach ($hands as $pid => $h) $handCounts[$pid] = count($h);
@@ -322,29 +295,51 @@ class CardGameController extends Controller
                 return [$room, $hands[(string)$userId], $handCounts, $deckCount, $room->current_turn];
             });
 
-        // Optional: broadcast a "CardPickedUp" sanitized event to presence
-        // try {
-        //     broadcast(new CardPickedUp(
-        //         roomId:        $room->id,
-        //         userId:        $userId,
-        //         handCounts:    $handCounts,
-        //         deckCount:     $deckCount,
-        //         turnPlayerId:  $turnPlayerId,
-        //     ))->toOthers();
-        // } catch (\Exception $e) {
-        //     Log::error('Failed to broadcast pickup: ' . $e->getMessage());
-        // }
+        broadcast(new HandSynced(
+            userId: $userId,
+            hand:   $userHand
+        ));
 
-        // Always sync the drawer’s private hand
-        try {
-            broadcast(new HandSynced(
-                userId: $userId,
-                hand:   $userHand
-            ));
-        } catch (\Exception $e) {
-            Log::error("Failed to hand-sync user {$userId} after pickup: " . $e->getMessage());
+        broadcast(new CardPlayed(
+            roomId:       $room->id,
+            userId:       $userId,
+            card:         '',
+            usedCards:    $room->used_cards ?? [],
+            handCounts:   $handCounts,
+            turnPlayerId: $turnPlayerId,
+            deckCount:    $deckCount
+        ))->toOthers();
+
+        return back();
+    }
+    public function resyncState(Request $request, int $roomId)
+    {
+        $userId = $request->user()->id;
+
+        $room = Room::with('players')->findOrFail($roomId);
+
+        // Make sure user is in the room
+        if (!$room->players()->where('users.id', $userId)->exists()) {
+            abort(403, 'You must join this room first.');
         }
 
-        return response()->noContent();
+        $hands = $room->player_hands ?? [];
+        $usedCards = $room->used_cards ?? [];
+        $handCounts = [];
+
+        foreach ($hands as $pid => $h) {
+            $handCounts[$pid] = count($h);
+        }
+
+        return response()->json([
+            'hand'           => $hands[(string)$userId] ?? [],
+            'hand_counts'    => $handCounts,
+            'deck_count'     => count($room->deck ?? []),
+            'used_cards'     => $usedCards,
+            'current_turn'   => $room->current_turn,
+            'game_status'    => $room->game_status,
+        ]);
     }
+
+
 }

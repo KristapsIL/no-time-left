@@ -22,7 +22,7 @@ class HandSynced implements ShouldBroadcastNow
 
     public function broadcastOn()
     {
-        return new PrivateChannel('user.' . $this->userId);
+        return new PrivateChannel("user-{$this->userId}");
     }
 
     public function broadcastAs(): string

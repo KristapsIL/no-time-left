@@ -11,13 +11,25 @@ class GameStarted implements ShouldBroadcastNow
 {
     use InteractsWithSockets, SerializesModels;
 
+    public int $roomId;
+    public array $handCounts;
+    public array $usedCards;
+    public int $turnPlayerId;
+    public int $deckCount;
+
     public function __construct(
-        public int $roomId,
-        private array $handCounts,     // [userId => count]
-        private array $usedCards,      // discard pile (or just top)
-        private int $turnPlayerId,
-        private int $deckCount
-    ) {}
+        int $roomId,
+        array $handCounts,
+        array $usedCards,
+        int $turnPlayerId,
+        int $deckCount
+    ) {
+        $this->roomId = $roomId;
+        $this->handCounts = $handCounts;
+        $this->usedCards = $usedCards;
+        $this->turnPlayerId = $turnPlayerId;
+        $this->deckCount = $deckCount;
+    }
 
     public function broadcastOn()
     {
@@ -32,10 +44,11 @@ class GameStarted implements ShouldBroadcastNow
     public function broadcastWith(): array
     {
         return [
-            'hand_counts'     => $this->handCounts,
-            'used_cards'      => array_values($this->usedCards),
-            'turn_player_id'  => $this->turnPlayerId,
-            'deck_count'      => $this->deckCount,
+            'hand_counts'    => $this->handCounts,
+            'used_cards'     => $this->usedCards,
+            'turn_player_id' => $this->turnPlayerId,
+            'deck_count'     => $this->deckCount,
         ];
     }
 }
+

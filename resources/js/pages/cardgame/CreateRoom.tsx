@@ -30,17 +30,18 @@ function CreateRoom() {
         <AppLayout>
             <Head title="Create Room" />
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                <div>
-                    <label className="block mb-1">Room Name</label>
-                    <input
-                        type="text" 
-                        value={Name}  // bind the value to state
-                        onChange={(e) => setName(e.target.value)}
-                        className="border px-2 py-1 rounded w-full"
-                        placeholder="Enter room name"
-                        required
-                    />
-                </div>
+            <div>
+                <label className="block mb-1">Room Name</label>
+                <input
+                    type="text" 
+                    value={Name}  // bind the value to state
+                    onChange={(e) => setName(e.target.value)}
+                    className="border px-2 py-1 rounded w-full"
+                    placeholder="Enter room name"
+                    required
+                />
+            </div>
+
                 <div>
                     <label className="block mb-1">Public Room?</label>
                     <input

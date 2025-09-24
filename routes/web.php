@@ -28,12 +28,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/board/{roomId}/start-game', [CardGameController::class, 'startGame'] )->name('startGame');
     Route::post('/board/{roomId}/play-card', [CardGameController::class, 'playCard']);
     Route::put('/board/{roomId}/pickup', [CardGameController::class, 'pickUpCard']);
+    Route::get('/board/{room}/resync-state', [CardGameController::class, 'resyncState']);
 
     Route::get('/createRoom', [RoomController::class, 'createRoom'])->name('createRoom');
     Route::post('/storeRules', [RoomController::class, 'store'])->name('storeRules');
     Route::get('/findRoom', [RoomController::class, 'findRoom'])->name('findRoom');
     Route::get('/joinroom/{roomId}', [RoomController::class, 'joinRoom'])->name('joinRoom');
     Route::delete('/leaveroom/{roomId}', [RoomController::class, 'leaveRoom'])->name('leaveRoom');
+    Route::post('/rooms/{room}/resync-hand', [RoomController::class, 'resyncHand']);
     
     Route::get('/test-event', [RoomController::class, 'test'])->name('test-event');
     
