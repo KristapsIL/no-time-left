@@ -3,6 +3,7 @@ import { Head, router} from "@inertiajs/react";
 
 type Room = {
     id: number;
+    room_name: string;
     code: string;
     public: boolean;
     max_players: number;
@@ -23,6 +24,7 @@ function FindRoom({ rooms }: Props) {
                     <div className="space-y-2">
                         {rooms.map((room) => (
                             <div key={room.id} className="border p-3 rounded">
+                                <h2> {room.room_name}</h2>
                                 <p>Max Players: {room.max_players}</p>
                                 <p>Public: {room.public ? "Yes" : "No"}</p>
                                 <p>Rules: {room.rules.join(", ")}</p>

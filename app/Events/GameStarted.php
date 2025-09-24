@@ -2,30 +2,33 @@
 
 namespace App\Events;
 
-use Illuminate\Broadcasting\Channel;
-use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PresenceChannel;
-use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
-use Illuminate\Foundation\Events\Dispatchable;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Queue\SerializesModels;
-use App\Models\Room;
+use Illuminate\Broadcasting\InteractsWithSockets;
 
-class GameStarted implements ShouldBroadcast
+class GameStarted implements ShouldBroadcastNow
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels;
+    use InteractsWithSockets, SerializesModels;
 
-    public $roomId;
-    public $player_hands;
-    public $deck;
-    public $used_cards;
+    public int $roomId;
+    public array $handCounts;
+    public array $usedCards;
+    public int $turnPlayerId;
+    public int $deckCount;
 
-    public function __construct($roomId, $player_hands, $deck, $used_cards = [])
-    {
+    public function __construct(
+        int $roomId,
+        array $handCounts,
+        array $usedCards,
+        int $turnPlayerId,
+        int $deckCount
+    ) {
         $this->roomId = $roomId;
-        $this->player_hands = $player_hands;
-        $this->deck = $deck;
-        $this->used_cards = $used_cards;
+        $this->handCounts = $handCounts;
+        $this->usedCards = $usedCards;
+        $this->turnPlayerId = $turnPlayerId;
+        $this->deckCount = $deckCount;
     }
 
     public function broadcastOn()
@@ -33,9 +36,19 @@ class GameStarted implements ShouldBroadcast
         return new PresenceChannel('room-' . $this->roomId);
     }
 
-    public function broadcastAs()
+    public function broadcastAs(): string
     {
         return 'game-started';
+    }
+
+    public function broadcastWith(): array
+    {
+        return [
+            'hand_counts'    => $this->handCounts,
+            'used_cards'     => $this->usedCards,
+            'turn_player_id' => $this->turnPlayerId,
+            'deck_count'     => $this->deckCount,
+        ];
     }
 }
 

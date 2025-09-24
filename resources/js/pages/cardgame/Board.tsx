@@ -1,414 +1,252 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Head, router, usePage } from '@inertiajs/react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { router, usePage } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import RoomChat from '@/components/RoomChat';
-import { MessageCircle } from 'lucide-react';
-import Echo from 'laravel-echo';
+import echo from '@/lib/echo';
+import { PlayerHand } from '@/components/Board/PlayerHand';
+import { OtherPlayers } from '@/components/Board/OtherPlayers';
+import { Deck } from '@/components/Board/Deck';
+import { TopCard } from '@/components/Board/TopCard';
+import { GameControls } from '@/components/Board/GameControls';
+import { isValidPlay, uniqById } from '@/utils/gameLogic';
+import { playCardApi, pickupCardApi } from '@/utils/api';
 
-type Props = { 
-  room: {
-    id: number;
-    code: string;
-    rules: string[];
-    player_hands?: Record<string, string[]>;
-    used_cards?: string[];
-    game_status?: string;
-    players?: any[];
-  };
+type Player = { id: number; name?: string };
+
+type Room = {
+  id: number;
+  code: string;
+  rules: string[];
+  player_hands?: Record<string, string[]>;
+  used_cards?: string[];
+  game_status?: 'waiting' | 'in_progress' | 'finished';
+  players?: Player[];
+};
+
+type Props = {
+  room: Room;
   deck: string[];
   userId: number;
 };
 
-function Board(_initialProps: Props) {
+type GameStartedPayload = {
+  turnPlayerId?: number;
+  deckCount?: number;
+  handCounts?: Record<string, number>;
+  usedCards?: string[];
+  // snake_case fallbacks
+  turn_player_id?: number;
+  deck_count?: number;
+  hand_counts?: Record<string, number>;
+  used_cards?: string[];
+};
+
+type CardPlayedPayload = {
+  usedCards?: string[];
+  handCounts?: Record<string, number>;
+  deckCount?: number;
+  turnPlayerId?: number;
+  // snake_case fallbacks
+  used_cards?: string[];
+  hand_counts?: Record<string, number>;
+  deck_count?: number;
+  turn_player_id?: number;
+};
+
+export default function Board() {
   const { props } = usePage<Props>();
   const { room, deck, userId } = props;
+  const uid = String(userId);
 
+  const [hand, setHand] = useState<string[]>(room.player_hands?.[uid] ?? []);
+  const [deckCount, setDeckCount] = useState<number>(deck?.length ?? 0);
+  const [topCard, setTopCard] = useState<string | null>(room.used_cards?.at(-1) ?? null);
+  const [connectedPlayers, setConnectedPlayers] = useState<Room['players']>(room.players ?? []);
+  const [handCounts, setHandCounts] = useState<Record<string, number>>({});
+  const [currentTurn, setCurrentTurn] = useState<number | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [hand, setHand] = useState<string[]>(room.player_hands?.[String(userId)] || []);
-  const [currentDeck, setCurrentDeck] = useState(deck);
-  const initialTopCard = room.used_cards?.length ? room.used_cards.slice(-1)[0] : null;
-  const [topCard, setTopCard] = useState<string | null>(initialTopCard);
-  const [gameStatus, setGameStatus] = useState(room.game_status || 'waiting');
   const [isStartingGame, setIsStartingGame] = useState(false);
-  const [connectedPlayers, setConnectedPlayers] = useState<any[]>([]);
 
-  const hasLeftRef = useRef(false);
+  const isMyTurn = useMemo(() => currentTurn === userId, [currentTurn, userId]);
 
+  // Keep refs to channels if you need to debug or extend later
+  const roomChannelRef = useRef<any>(null);
+  const privateChannelRef = useRef<any>(null);
 
-    useEffect(() => {
-    const off = router.on('before', (event) => {
-        const id = (window as any).Echo?.socketId?.();
-        if (id) event.detail.visit.headers['X-Socket-ID'] = id; // attach only when available
-    });
-    return () => off();
-    }, []);
-
+  // --- Presence room channel: subscribe once per room.id
   useEffect(() => {
-    const uid = String(userId);
-    setHand(room.player_hands?.[uid] ?? []);
-    setCurrentDeck(deck ?? []);
-    setTopCard(room.used_cards?.length ? room.used_cards.at(-1)! : null);
-    setGameStatus(room.game_status || 'waiting');
-  }, [room.player_hands, room.used_cards, room.game_status, deck, userId]);
+    if (!echo) return;
 
-  useEffect(() => {
-    const echo = new Echo({
-      broadcaster: 'pusher',
-      key: import.meta.env.VITE_PUSHER_APP_KEY,
-      cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER,
-      forceTLS: true,
+    const roomChannel = echo.join(`room-${room.id}`);
+    roomChannelRef.current = roomChannel;
+
+    // Normalize members to { id, name }
+    roomChannel.here((members: any[]) => {
+      const players: Player[] = (members ?? []).map(m => ({
+        id: m.id,
+        name: m.name ?? `Player ${m.id}`,
+      }));
+      setConnectedPlayers(uniqById(players));
     });
 
-    const channelName = `room-${room.id}`;
-    const uid = String(userId);
-    const channel = echo.join(channelName);
+    roomChannel.joining((member: any) => {
+      const player: Player = { id: member.id, name: member.name ?? `Player ${member.id}` };
+      setConnectedPlayers(prev => uniqById([...(prev ?? []), player]));
+    });
 
-    channel.listen('.game-started', (data: any) => {
-      console.log('🎮 Game started event received:', data);
-      
-      // Update game status
-      setGameStatus('in_progress');
+    roomChannel.leaving((member: any) => {
+      setConnectedPlayers(prev => (prev ?? []).filter(p => p.id !== member.id));
+    });
+
+    // Game events
+    roomChannel.listen('.game-started', (data: GameStartedPayload) => {
+      const turn = data.turnPlayerId ?? data.turn_player_id ?? null;
+      const deckC = data.deckCount ?? data.deck_count ?? 0;
+      const counts = data.handCounts ?? data.hand_counts ?? {};
+      const used = (data.usedCards ?? data.used_cards) ?? [];
+
       setIsStartingGame(false);
-      
-      // Update player hands
-      if (data.player_hands && data.player_hands[uid]) {
-        console.log('Setting hand for user', uid, ':', data.player_hands[uid]);
-        setHand([...data.player_hands[uid]]);
-      }
-      
-      // Update deck
-      if (Array.isArray(data.deck)) {
-        setCurrentDeck([...data.deck]);
-      }
-      
-      // Update top card
-      if (Array.isArray(data.used_cards) && data.used_cards.length > 0) {
-        const newTopCard = data.used_cards.at(-1) as string;
-        console.log('Setting top card:', newTopCard);
-        setTopCard(newTopCard);
-      } else {
-        setTopCard(null);
-      }
+      setCurrentTurn(turn);
+      setDeckCount(deckC);
+      setHandCounts(counts);
+      setTopCard(used.at(-1) ?? null);
     });
 
-    // Card played
-    channel.listen('.card-played', (data: any) => {
-      console.log('Card played event received:', data);
+    roomChannel.listen('.card-played', (data: CardPlayedPayload) => {
+      const used = (data.usedCards ?? data.used_cards) ?? [];
+      const counts = data.handCounts ?? data.hand_counts;
+      const deckC = data.deckCount ?? data.deck_count;
+      const turn = data.turnPlayerId ?? data.turn_player_id;
 
-      if (Array.isArray(data.used_cards) && data.used_cards.length > 0) {
-        const nextTop = data.used_cards.at(-1) as string;
-        setTopCard(prev => (prev === nextTop ? prev : nextTop));
-      }
-      if (data.player_hands && data.player_hands[uid]) {
-        setHand([...data.player_hands[uid]]);
-      }
-      if (Array.isArray(data.deck)) {
-        setCurrentDeck([...data.deck]);
-      }
-    });
-
-    // Presence member tracking
-    channel.here((members: any[]) => {
-      console.log('👥 Current members:', members);
-      setConnectedPlayers(members);
-    });
-
-    channel.joining((member: any) => {
-      console.log('👋 Member joined:', member);
-      setConnectedPlayers(prev => [...prev, member]);
-    });
-
-    channel.leaving((member: any) => {
-      console.log('👋 Member left:', member);
-      setConnectedPlayers(prev => prev.filter(p => p.id !== member.id));
+      setTopCard(prev => used.at(-1) ?? prev);
+      if (counts) setHandCounts({ ...counts });
+      if (Number.isInteger(deckC)) setDeckCount(deckC as number);
+      if (Number.isInteger(turn)) setCurrentTurn(turn as number);
     });
 
     return () => {
-      echo.leave(channelName); // cleanly leave presence channel
-      try { (echo as any).disconnect?.(); } catch {}
-    };
-  }, [room.id, userId]);
-
-  useEffect(() => {
-    const token = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '';
-
-    const leaveOnce = () => {
-      if (hasLeftRef.current) return;
-      hasLeftRef.current = true;
-
-      const fd = new FormData();
-      fd.append('_method', 'DELETE');
-      if (token) fd.append('_token', token);
-
-      const ok = navigator.sendBeacon(`/leaveroom/${room.id}`, fd);
-
-      if (!ok) {
-        fetch(`/leaveroom/${room.id}`, {
-          method: 'POST',
-          headers: { 'X-CSRF-TOKEN': token },
-          body: new URLSearchParams({ _method: 'DELETE' }),
-          keepalive: true,
-        }).catch(() => {});
-      }
-    };
-
-    const isNavigatingAway = () => {
-      return document.visibilityState === 'hidden' && performance.navigation.type !== 1;
-    };
-
-    const onPageHide = () => {
-      if (isNavigatingAway()) leaveOnce();
-    };
-
-    window.addEventListener('pagehide', onPageHide);
-
-    return () => {
-      leaveOnce();
-      window.removeEventListener('pagehide', onPageHide);
+      try {
+        echo.leave(`room-${room.id}`);
+      } catch {}
+      roomChannelRef.current = null;
     };
   }, [room.id]);
 
-    const startGame = () => {
-        if (isStartingGame) return; // Prevent double clicks
-        
-        setIsStartingGame(true);
-        
-        router.post(`/board/${room.id}/start-game`, {}, {
-            preserveState: true,
-            headers: { 'X-Socket-ID': (window as any).Echo?.socketId?.() ?? '' },
-            onSuccess: () => {
-                console.log(' Start game request successful');
-                // Don't reload! Let Pusher events update the UI
-            },
-            onError: (errors) => {
-                console.error('❌ Start game failed:', errors);
-                setIsStartingGame(false);
-                alert('Failed to start game: ' + (errors.message || 'Unknown error'));
-            },
-            onFinish: () => {
-                // Reset loading state after a delay if no Pusher event received
-                setTimeout(() => setIsStartingGame(false), 3000);
-            }
-        });
+  // --- Private user channel: subscribe once per userId
+  useEffect(() => {
+    if (!echo) return;
+
+    const privateChannel = echo.private(`user-${userId}`);
+    privateChannelRef.current = privateChannel;
+
+    privateChannel.listen('.hand-synced', (data: { hand: string[] }) => {
+      setHand(data.hand ?? []);
+    });
+
+    return () => {
+      try {
+        echo.leave(`user-${userId}`);
+      } catch {}
+      privateChannelRef.current = null;
     };
+  }, [userId]);
 
+  // ----- Start game -----
+  const startGame = useCallback(() => {
+    if (isStartingGame) return;
 
-  const leaveGame = () => {
-    hasLeftRef.current = false;
+    setIsStartingGame(true);
+
+    router.post(
+      `/board/${room.id}/start-game`,
+      {},
+      {
+        preserveState: true,
+        headers: {
+          'X-Socket-Id': (echo as any)?.socketId?.() ?? '',
+        },
+        onError: (errors) => {
+          setIsStartingGame(false);
+        },
+        onFinish: () => {
+          // safety to clear spinner even if server didn't broadcast
+          setTimeout(() => setIsStartingGame(false), 2500);
+        },
+      }
+    );
+  }, [isStartingGame, room.id]);
+
+  // ----- Play card -----
+  const playCard = useCallback(
+    async (card: string) => {
+      if (!isMyTurn || !isValidPlay(card, topCard)) return;
+      try {
+        await playCardApi(room.id, card);
+        // Optimistic update; server event will reconcile
+        setHand(prev => prev.filter(c => c !== card));
+        setTopCard(card);
+      } catch (err) {
+        console.error(err);
+      }
+    },
+    [isMyTurn, topCard, room.id]
+  );
+
+  // ----- Pickup card -----
+  const pickupCard = useCallback(async () => {
+    if (!isMyTurn) return;
+    try {
+      await pickupCardApi(room.id);
+      // Server should push new hand via `.hand-synced`
+    } catch (err) {
+      console.error(err);
+    }
+  }, [isMyTurn, room.id]);
+
+  // ----- Leave game -----
+  const leaveGame = useCallback(() => {
     router.delete(`/leaveroom/${room.id}`, {
       preserveState: true,
-      onFinish: () => { hasLeftRef.current = true; },
+      headers: {
+        'X-Socket-Id': (echo as any)?.socketId?.() ?? '',
+      },
     });
-  };
-
-  const isValidPlay = (card: string, topCard: string | null): boolean => {
-    if (!topCard) return true; // first card is always valid
-
-    const cardValue = card.slice(0, -1);
-    const cardSuit = card.slice(-1);
-
-    const topValue = topCard.slice(0, -1);
-    const topSuit = topCard.slice(-1);
-
-    return cardValue === topValue || cardSuit === topSuit;
-  };
-
-  const playCard = async (card: string) => {
-    // Optimistic update
-    const previousHand = hand;
-    const previousTopCard = topCard;
-    setHand(prev => prev.filter(c => c !== card));
-    setTopCard(card);
-
-    try {
-      const response = await fetch(`/board/${room.id}/play-card`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-        },
-        body: JSON.stringify({ card }),
-      });
-
-      if (!response.ok) {
-        // Handle error response
-        let errorMessage = `Error ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorData.message || errorMessage;
-        } catch {
-          // If JSON parsing fails, use the status code
-        }
-        throw new Error(errorMessage);
-      }
-
-      console.log(`Card ${card} confirmed by server`);
-      // Success - the real-time update will come via Pusher
-      
-    } catch (error) {
-      console.error('Invalid move:', error);
-      
-      // Rollback optimistic update
-      setHand(previousHand);
-      setTopCard(previousTopCard);
-      
-      // Show user-friendly error
-      const errorMessage = error instanceof Error ? error.message : 'Invalid move! You can\'t play that card.';
-      alert(errorMessage);
-    }
-  };
-
-  const handlePlayCard = (card: string) => {
-    if (!isValidPlay(card, topCard)) {
-      return;
-    }
-    playCard(card);
-  };
-
-  console.log('player_hands:', room.player_hands);
-  console.log('userId:', userId);
-  console.log('hand:', hand);
-  console.log('topcard:', topCard);
+  }, [room.id]);
 
   return (
     <AppLayout>
-      <Head title={`Board - Room ${room.code}`} />
-      <div className={`p-6 space-y-4 transition-all duration-300 ${isChatOpen ? 'mr-80' : ''}`}>
+      <div className="w-full h-screen flex flex-col items-center justify-between p-6 bg-green-700">
+        {/* Other players */}
+        <OtherPlayers
+          players={(connectedPlayers ?? []).filter(p => p?.id !== userId)}
+          handCounts={handCounts}
+          currentTurn={currentTurn}
+          userId={userId}
+        />
 
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Room {room.code}</h1>
-            <p className="text-sm text-muted-foreground">Game Board</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {gameStatus === 'waiting' && (
-              <button
-                onClick={startGame}
-                disabled={isStartingGame}
-                className={`px-3 py-2 rounded text-white transition-colors ${
-                  isStartingGame 
-                    ? 'bg-gray-500 cursor-not-allowed' 
-                    : 'bg-green-500 hover:bg-green-600'
-                }`}
-              >
-                {isStartingGame ? 'Starting...' : 'Start Game'}
-              </button>
-            )}
-            
-            {gameStatus === 'in_progress' && (
-              <div className="px-3 py-2 rounded bg-blue-500 text-white">
-                Game in Progress
-              </div>
-            )}
-            <button
-              onClick={leaveGame}
-              className="px-3 py-2 rounded bg-red-500 text-white hover:bg-red-600 transition-colors"
-            >
-              Leave Game
-            </button>
-            <button
-              onClick={() => setIsChatOpen(!isChatOpen)}
-              className={`flex items-center gap-2 px-3 py-2 rounded transition-colors ${
-                isChatOpen 
-                  ? 'bg-blue-500 text-white hover:bg-blue-600' 
-                  : 'bg-neutral-200 text-neutral-700 hover:bg-neutral-300 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700'
-              }`}
-            >
-              <MessageCircle className="w-4 h-4" />
-              {isChatOpen ? 'Close Chat' : 'Open Chat'}
-            </button>
-          </div>
+        {/* Center table: deck + top card */}
+        <div className="flex gap-12 items-center justify-center flex-wrap">
+          <Deck deckCount={deckCount} isMyTurn={isMyTurn} pickupCard={pickupCard} />
+          <TopCard topCard={topCard} />
         </div>
 
-        {/* Connected Players */}
-        <div className="bg-background rounded-lg border p-4">
-          <h2 className="text-lg font-semibold mb-2">Players in Room ({connectedPlayers.length})</h2>
-          <div className="flex gap-2 flex-wrap">
-            {connectedPlayers.map((player) => (
-              <div
-                key={player.id}
-                className={`px-3 py-1 rounded-full text-sm ${
-                  player.id === userId 
-                    ? 'bg-blue-500 text-white' 
-                    : 'bg-neutral-200 dark:bg-neutral-700 text-foreground'
-                }`}
-              >
-                {player.name} {player.id === userId && '(You)'}
-              </div>
-            ))}
-            {connectedPlayers.length === 0 && (
-              <p className="text-muted-foreground">Connecting...</p>
-            )}
-          </div>
-        </div>
+        {/* Player hand */}
+        <PlayerHand hand={hand} topCard={topCard} isMyTurn={isMyTurn} playCard={playCard} />
 
-        {/* Top Card */}
-        <div className="bg-background rounded-lg border p-4">
-          <h2 className="text-lg font-semibold mb-2">Top Card</h2>
-          {topCard ? (
-            <div className="px-3 py-2 border rounded text-xl">{topCard}</div>
-          ) : (
-            <p className="text-gray-500">No card on table yet</p>
-          )}
-        </div>
+        {/* Game controls */}
+        <GameControls
+          roomId={room.id}
+          isStartingGame={isStartingGame}
+          connectedPlayers={connectedPlayers ?? []}
+          isChatOpen={isChatOpen}
+          toggleChat={() => setIsChatOpen(open => !open)}
+          leaveGame={leaveGame}
+          startGame={startGame}
+        />
 
-        {/* Player Hand */}
-        <div className="bg-background rounded-lg border p-4">
-          <h2 className="text-lg font-semibold mb-2">Your Hand</h2>
-          <div className="flex gap-2 flex-wrap">
-            {hand.map((card) => (
-              <button
-                key={card}
-                onClick={() => handlePlayCard(card)}
-                disabled={gameStatus !== 'in_progress'}
-                className={`px-3 py-2 bg-neutral-100 dark:bg-neutral-800 border border-input rounded-lg text-foreground transition-colors ${
-                  gameStatus === 'in_progress' 
-                    ? 'hover:bg-blue-100 dark:hover:bg-blue-700 cursor-pointer' 
-                    : 'opacity-50 cursor-not-allowed'
-                }`}
-              >
-                {card}
-              </button>
-            ))}
-            {hand.length === 0 && gameStatus === 'waiting' && (
-              <p className="text-muted-foreground">Waiting for game to start...</p>
-            )}
-            {hand.length === 0 && gameStatus === 'in_progress' && (
-              <p className="text-muted-foreground">No cards in hand!</p>
-            )}
-          </div>
-        </div>
-
-        {/* Deck Info */}
-        <div className="bg-background rounded-lg border p-4">
-          <h2 className="text-lg font-semibold mb-2">Remaining Deck</h2>
-          <p>{currentDeck.length} cards left</p>
-        </div>
-
-        {/* Room Rules */}
-        {room.rules && room.rules.length > 0 && (
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4">
-            <h3 className="font-semibold text-yellow-800 dark:text-yellow-300 mb-2">Room Rules</h3>
-            <ul className="list-disc list-inside text-yellow-700 dark:text-yellow-400 space-y-1">
-              {room.rules.map((rule, index) => (
-                <li key={index}>{rule}</li>
-              ))}
-            </ul>
-          </div>
-        )}
+        {/* Chat panel */}
+        <RoomChat roomId={room.id} isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
       </div>
-
-      {/* Chat */}
-      <RoomChat 
-        roomId={room.id} 
-        isOpen={isChatOpen} 
-        onClose={() => setIsChatOpen(false)} 
-      />
     </AppLayout>
   );
 }
-
-export default Board;
-
-
