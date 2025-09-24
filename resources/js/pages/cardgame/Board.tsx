@@ -74,11 +74,7 @@ export default function Board() {
   const privateChannelRef = useRef<any>(null);
 
   // Helper: unique members by id/user_id
-  function uniqById(arr: any[]) {
-    const m = new Map<string | number, any>();
-    for (const p of arr) m.set(p.id ?? p.user_id ?? p, p);
-    return Array.from(m.values());
-  }
+
     useEffect(() => {
         const fetchState = async () => {
             try {
