@@ -8,7 +8,7 @@ import { OtherPlayers } from '@/components/Board/OtherPlayers';
 import { Deck } from '@/components/Board/Deck';
 import { TopCard } from '@/components/Board/TopCard';
 import { GameControls } from '@/components/Board/GameControls';
-import { isValidPlay, uniqById } from '@/utils/gameLogic';
+import { isValidPlay } from '@/utils/gameLogic';
 import { playCardApi, pickupCardApi } from '@/utils/api';
 
 type Player = { id: number; name?: string };
@@ -54,24 +54,73 @@ type CardPlayedPayload = {
 };
 
 export default function Board() {
-  const { props } = usePage<Props>();
-  const { room, deck, userId } = props;
-  const uid = String(userId);
+    const { props } = usePage<Props>();
+    const { room, deck, userId } = props;
+    const uid = String(userId);
 
-  const [hand, setHand] = useState<string[]>(room.player_hands?.[uid] ?? []);
-  const [deckCount, setDeckCount] = useState<number>(deck?.length ?? 0);
-  const [topCard, setTopCard] = useState<string | null>(room.used_cards?.at(-1) ?? null);
-  const [connectedPlayers, setConnectedPlayers] = useState<Room['players']>(room.players ?? []);
-  const [handCounts, setHandCounts] = useState<Record<string, number>>({});
-  const [currentTurn, setCurrentTurn] = useState<number | null>(null);
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isStartingGame, setIsStartingGame] = useState(false);
+    const [hand, setHand] = useState<string[]>(room.player_hands?.[uid] ?? []);
+    const [deckCount, setDeckCount] = useState<number>(deck?.length ?? 0);
+    const [topCard, setTopCard] = useState<string | null>(room.used_cards?.at(-1) ?? null);
+    const [connectedPlayers, setConnectedPlayers] = useState<Room['players']>(room.players ?? []);
+    const [handCounts, setHandCounts] = useState<Record<string, number>>({});
+    const [currentTurn, setCurrentTurn] = useState<number | null>(null);
+    const [isChatOpen, setIsChatOpen] = useState(false);
+    const [isStartingGame, setIsStartingGame] = useState(false);
 
-  const isMyTurn = useMemo(() => currentTurn === userId, [currentTurn, userId]);
+    const isMyTurn = useMemo(() => currentTurn === userId, [currentTurn, userId]);
 
-  // Keep refs to channels if you need to debug or extend later
-  const roomChannelRef = useRef<any>(null);
-  const privateChannelRef = useRef<any>(null);
+
+    type AnyChannel = {
+    listen: (event: string, cb: (payload: unknown) => void) => AnyChannel;
+    stopListening: (event: string, cb?: (payload: unknown) => void) => AnyChannel;
+    };
+
+    const roomChannelRef = useRef<AnyChannel | null>(null);
+    const privateChannelRef = useRef<AnyChannel | null>(null);
+
+
+    // Helper: unique members by id/user_id
+    function uniqById<T extends { id?: string|number; user_id?: string|number }>(arr: T[]): T[] {
+    const map = new Map<string, T>();
+    for (const item of arr) {
+        const raw = item.id ?? item.user_id;
+        if (raw !== undefined) map.set(String(raw), item);
+    }
+    return [...map.values()];
+    }
+
+
+    useEffect(() => {
+    const fetchState = async () => {
+        try {
+        const res = await fetch(`/board/${room.id}/resync-state`, {
+            headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+            ...(echo?.socketId?.() ? { 'X-Socket-Id': echo.socketId() } : {}),
+            },
+        });
+
+        const ct = res.headers.get('content-type') ?? '';
+        if (!res.ok && !ct.includes('application/json')) {
+            // Surface HTML errors clearly instead of crashing on res.json()
+            const text = await res.text();
+            throw new Error(`Resync failed (${res.status}). ${text.slice(0, 200)}…`);
+        }
+        const data = ct.includes('application/json') ? await res.json() : {};
+
+        setHand(Array.isArray(data.hand) ? data.hand : []);
+        setHandCounts(data.hand_counts ?? {});
+        setDeckCount(data.deck_count ?? 0);
+        setTopCard(data.used_cards?.length ? data.used_cards.at(-1)! : null);
+        setCurrentTurn(data.current_turn ?? null);
+        } catch (err) {
+        console.error('Resync failed:', err);
+        }
+    };
+
+    fetchState();
+    }, [room.id]);
 
   // --- Presence room channel: subscribe once per room.id
   useEffect(() => {
@@ -79,9 +128,9 @@ export default function Board() {
 
     const roomChannel = echo.join(`room-${room.id}`);
     roomChannelRef.current = roomChannel;
-
-    // Normalize members to { id, name }
-    roomChannel.here((members: any[]) => {
+    
+    type PresenceMember = { id: number; name?: string;};
+    roomChannel.here((members: PresenceMember[]) => {
       const players: Player[] = (members ?? []).map(m => ({
         id: m.id,
         name: m.name ?? `Player ${m.id}`,
@@ -89,12 +138,12 @@ export default function Board() {
       setConnectedPlayers(uniqById(players));
     });
 
-    roomChannel.joining((member: any) => {
+    roomChannel.joining((member: PresenceMember) => {
       const player: Player = { id: member.id, name: member.name ?? `Player ${member.id}` };
       setConnectedPlayers(prev => uniqById([...(prev ?? []), player]));
     });
 
-    roomChannel.leaving((member: any) => {
+    roomChannel.leaving((member: PresenceMember) => {
       setConnectedPlayers(prev => (prev ?? []).filter(p => p.id !== member.id));
     });
 
@@ -125,11 +174,15 @@ export default function Board() {
     });
 
     return () => {
-      try {
-        echo.leave(`room-${room.id}`);
-      } catch {}
-      roomChannelRef.current = null;
+        try {
+            roomChannel.stopListening('.game-started');
+            roomChannel.stopListening('.card-played');
+        } finally {
+            echo.leave(`room-${room.id}`);
+        }
+        roomChannelRef.current = null;
     };
+
   }, [room.id]);
 
   // --- Private user channel: subscribe once per userId
@@ -144,11 +197,14 @@ export default function Board() {
     });
 
     return () => {
-      try {
-        echo.leave(`user-${userId}`);
-      } catch {}
-      privateChannelRef.current = null;
+        try {
+            privateChannel.stopListening('.hand-synced');
+        } finally {
+            echo.leave(`user-${userId}`);
+        }
+        privateChannelRef.current = null;
     };
+
   }, [userId]);
 
   // ----- Start game -----
@@ -158,22 +214,19 @@ export default function Board() {
     setIsStartingGame(true);
 
     router.post(
-      `/board/${room.id}/start-game`,
-      {},
-      {
-        preserveState: true,
-        headers: {
-          'X-Socket-Id': (echo as any)?.socketId?.() ?? '',
-        },
-        onError: (errors) => {
-          setIsStartingGame(false);
-        },
-        onFinish: () => {
-          // safety to clear spinner even if server didn't broadcast
-          setTimeout(() => setIsStartingGame(false), 2500);
-        },
-      }
+        `/board/${room.id}/start-game`,
+        {},
+        {
+            preserveState: true,
+            headers: {
+            'Accept': 'application/json',
+            'X-Socket-Id': echo?.socketId?.() ?? '',
+            },
+            onError: () => setIsStartingGame(false),
+            onFinish: () => setTimeout(() => setIsStartingGame(false), 2500),
+        }
     );
+
   }, [isStartingGame, room.id]);
 
   // ----- Play card -----
@@ -208,7 +261,7 @@ export default function Board() {
     router.delete(`/leaveroom/${room.id}`, {
       preserveState: true,
       headers: {
-        'X-Socket-Id': (echo as any)?.socketId?.() ?? '',
+        'X-Socket-Id': echo?.socketId?.() ?? '',
       },
     });
   }, [room.id]);

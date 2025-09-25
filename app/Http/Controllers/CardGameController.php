@@ -29,7 +29,7 @@ class CardGameController extends Controller
                 ->with('error', 'Join the room before opening the board.');
         }
 
-        $room = Room::with(['players']) // preload players for UI seating if needed
+        $room = Room::with(['players']) 
             ->findOrFail($roomId);
 
         if ((!$room->deck || empty($room->deck)) && $room->game_status === 'waiting') {
