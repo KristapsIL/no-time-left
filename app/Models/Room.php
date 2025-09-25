@@ -7,16 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 class Room extends Model
 {
     protected $fillable = [
-        'room_name','room_code',
+        'room_name','room_code', 'created_by',
     ];
 
     public function owner()
     {
         return $this->belongsTo(User::class, 'created_by');
-    }
-    public function player()
-    {
-        return $this->belongsToMany(User::class, 'room_user');
     }
     
     public function players()
@@ -25,15 +21,22 @@ class Room extends Model
                 ->withPivot('role')
                 ->withTimestamps();
     }
+
+    public function game()
+    {
+        return $this->hasOne(CardGame::class);
+    }
     
+
     public function canStartGame()
     {
-        return $this->game_status === 'waiting' && $this->players()->count() >= 2;
+        return $this->game && $this->game->game_status === 'waiting' && $this->players()->count() >= 2;
     }
-    
+
     public function isGameActive()
     {
-        return in_array($this->game_status, ['starting', 'in_progress']);
+        return $this->game && in_array($this->game->game_status, ['starting', 'in_progress']);
     }
+
 
 }

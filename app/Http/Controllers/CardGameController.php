@@ -6,9 +6,11 @@ use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
-use App\Models\Room;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+
+use App\Models\Room;
+use App\Models\RoomRules;
+use App\Models\CardGame;
 
 use App\Events\GameStarted;
 use App\Events\CardPlayed;
@@ -32,44 +34,71 @@ class CardGameController extends Controller
         $room = Room::with(['players']) // preload players for UI seating if needed
             ->findOrFail($roomId);
 
-        if ((!$room->deck || empty($room->deck)) && $room->game_status === 'waiting') {
-            $room->deck = $this->buildDeck();
-            $room->save();
+        $game = $room->game;
+
+        if (!$game) {
+            $game = CardGame::create([
+                'room_id' => $room->id,
+                'deck' => $this->buildDeck(),
+                'game_status' => 'waiting',
+            ]);
+        }
+        if (empty($game->deck) && $game->game_status === 'waiting') {
+            $game->deck = $this->buildDeck();
+            $game->save();
         }
 
         return Inertia::render('cardgame/Board', [
             'room'   => $room,
             'rules'  => $room->rules,
-            'deck'   => $room->deck ?? [],
+            'deck'   => $game->deck ?? [],
             'userId' => $request->user()->id,
         ]);
+
     }
 
     public function shuffle(int $roomId): RedirectResponse
     {
-        $room = Room::findOrFail($roomId);
-        $deck = $room->deck ?? [];
+        $room = Room::with('game')->findOrFail($roomId);
+        $game = $room->game;
+
+        if (!$game) {
+            return back()->with('error', 'Game not initialized for this room.');
+        }
+
+        $deck = $game->deck ?? [];
 
         shuffle($deck);
 
-        $room->deck = $deck;
-        $room->save();
+        $game->deck = $deck;
+        $game->save();
 
         return back();
     }
 
+
     public function reset(int $roomId): RedirectResponse
     {
-        $room = Room::findOrFail($roomId);
-        $room->deck = $this->buildDeck();
-        $room->save();
+        $room = Room::with('game')->findOrFail($roomId);
+        $game = $room->game;
+
+        if (!$game) {
+            return back()->with('error', 'Game not initialized for this room.');
+        }
+
+        $game->deck = $this->buildDeck();
+        $game->used_cards = [];
+        $game->player_hands = [];
+        $game->current_turn = null;
+        $game->game_status = 'waiting';
+        $game->game_started_at = null;
+        $game->save();
 
         return back();
     }
 
     private function buildDeck(): array
     {
-        // Deck format: "VALUE-SUIT_SYMBOL", e.g., "10-♣", "Q-♥"
         $suits = ['♠', '♥', '♦', '♣'];
         $faces = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
         $deck  = [];
@@ -79,8 +108,10 @@ class CardGameController extends Controller
                 $deck[] = $face . '-' . $suit;
             }
         }
+
         return $deck;
     }
+
 
     public function startGame(Request $request, int $roomId)
     {
