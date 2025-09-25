@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('room_rules', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('room_id')->cascadeOnDelete();
+            $table->foreignId('room_id')->constrained()->cascadeOnDelete();
             $table->integer('max_players');
             $table->integer('cards_per_player')->default(7);
             $table->boolean('public')->default(true);

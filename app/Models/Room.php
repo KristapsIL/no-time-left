@@ -7,17 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Room extends Model
 {
     protected $fillable = [
-        'room_name','room_code', 'max_players', 'public', 'rules', 'created_by',
-        'game_status', 'player_hands', 'cards_per_player', 'game_started_at',
-        'deck', 'used_cards',
-    ];
-
-    protected $casts = [
-        'rules' => 'array',
-        'deck' => 'array',
-        'player_hands' => 'array',
-        'used_cards' => 'array',
-        'game_started_at' => 'datetime',
+        'room_name','room_code',
     ];
 
     public function owner()
