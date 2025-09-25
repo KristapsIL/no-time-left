@@ -11,11 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('rooms', function (Blueprint $table) {
+        Schema::create('room_rules', function (Blueprint $table) {
             $table->id();
-            $table->string('room_name');
-            $table->string('room_code')->unique();
-            $table->foreignId('created_by');
+            $table->foreignId('room_id')->cascadeOnDelete();
+            $table->integer('max_players');
+            $table->integer('cards_per_player')->default(7);
+            $table->boolean('public')->default(true);
+            $table->json('rules');
             $table->timestamps();
         });
     }
@@ -25,6 +27,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('rooms');
+        Schema::dropIfExists('room_rules');
     }
 };
