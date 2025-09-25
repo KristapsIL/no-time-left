@@ -70,11 +70,10 @@ export default function Board() {
     const isMyTurn = useMemo(() => currentTurn === userId, [currentTurn, userId]);
 
 
-type AnyChannel = {
-  listen: (event: string, cb: (payload: unknown) => void) => AnyChannel;
-  stopListening: (event: string, cb?: (payload: unknown) => void) => AnyChannel;
-};
-
+    type AnyChannel = {
+    listen: (event: string, cb: (payload: unknown) => void) => AnyChannel;
+    stopListening: (event: string, cb?: (payload: unknown) => void) => AnyChannel;
+    };
 
     const roomChannelRef = useRef<AnyChannel | null>(null);
     const privateChannelRef = useRef<AnyChannel | null>(null);
