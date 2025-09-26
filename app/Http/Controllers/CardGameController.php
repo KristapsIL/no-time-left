@@ -228,7 +228,15 @@ class CardGameController extends Controller
                 hand:   $hands[(string)$p->id]
             ));
         }
-        return response()->noContent();
+        return response()->json([
+            'success'      => true,
+            'hand'         => $actingHand ?? null,
+            'hand_counts'  => $handCounts ?? [],
+            'deck_count'   => $deckCount ?? 0,
+            'used_cards'   => $usedCards ?? [],
+            'current_turn' => $turnPlayerId ?? null,
+            'game_status'  => $game->game_status ?? null,
+        ]);
     }
 
 
