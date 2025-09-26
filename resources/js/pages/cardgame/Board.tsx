@@ -13,7 +13,6 @@ import { playCardApi, pickupCardApi } from '@/utils/api';
 
 type Player = { id: number; name?: string };
 
-
 type RoomRules = {
   public: boolean;
   max_players: number;
@@ -77,9 +76,21 @@ export default function Board() {
 
   const isMyTurn = useMemo(() => currentTurn === userId, [currentTurn, userId]);
 
-  // Keep refs to channels if you need to debug or extend later
-  const roomChannelRef = useRef<any>(null);
-  const privateChannelRef = useRef<any>(null);
+    type AnyChannel = {
+    listen: (event: string, cb: (payload: unknown) => void) => AnyChannel;
+    stopListening: (event: string, cb?: (payload: unknown) => void) => AnyChannel;
+    };
+    const roomChannelRef = useRef<AnyChannel | null>(null);
+
+     // Helper: unique members by id/user_id
+    function uniqById<T extends { id?: string|number; user_id?: string|number }>(arr: T[]): T[] {
+        const map = new Map<string, T>();
+        for (const item of arr) {
+            const raw = item.id ?? item.user_id;
+            if (raw !== undefined) map.set(String(raw), item);
+        }
+        return [...map.values()];
+    }
 
   // --- Presence room channel: subscribe once per room.id
   useEffect(() => {
@@ -205,7 +216,7 @@ useEffect(() => {
       {
         preserveState: true,
         headers: {
-          'X-Socket-Id': (echo as any)?.socketId?.() ?? '',
+          'X-Socket-Id': (echo)?.socketId?.() ?? '',
         },
         onError: (errors) => {
           setIsStartingGame(false);
@@ -250,7 +261,7 @@ useEffect(() => {
     router.delete(`/leaveroom/${room.id}`, {
       preserveState: true,
       headers: {
-        'X-Socket-Id': (echo as any)?.socketId?.() ?? '',
+        'X-Socket-Id': (echo)?.socketId?.() ?? '',
       },
     });
   }, [room.id]);
