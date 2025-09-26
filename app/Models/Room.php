@@ -24,10 +24,11 @@ class Room extends Model
         return $this->hasOne(CardGame::class);
     }
 
-    public function rules(){
+
+    public function rules()
+    {
         return $this->hasOne(RoomRules::class);
     }
-    
 
     public function canStartGame(){
         return $this->game && $this->game->game_status === 'waiting' && $this->players()->count() >= 2;

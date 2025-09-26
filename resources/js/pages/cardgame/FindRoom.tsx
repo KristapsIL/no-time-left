@@ -3,12 +3,15 @@ import AppLayout from '@/layouts/app-layout';
 import { Head } from "@inertiajs/react";
 import RoomCard from '@/components/FindRoom/RoomCard';
 
+
 type Room = {
     id: number;
     room_name: string;
-    public: boolean;
-    max_players: number;
-    rules: string[];
+    rules: {
+        public: boolean;
+        max_players: number;
+        rules: string[];
+    };
 };
 
 type Props = {

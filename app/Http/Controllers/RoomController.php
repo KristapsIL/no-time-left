@@ -51,7 +51,7 @@ class RoomController extends Controller
         return $code;
     }
     public function findRoom(){
-        $rooms = Room::all();
+        $rooms = Room::with('rules')->get();
         return Inertia::render('cardgame/FindRoom', ['rooms' => $rooms]);
     }
 
