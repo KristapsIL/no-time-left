@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { usePage } from '@inertiajs/react';
 import Pusher from 'pusher-js';
 import { X, MessageCircle, Send } from 'lucide-react';
 
@@ -25,7 +24,6 @@ const RoomChat: React.FC<RoomChatProps> = ({ roomId, isOpen, onClose }) => {
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const { props } = usePage();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -47,8 +45,15 @@ const RoomChat: React.FC<RoomChatProps> = ({ roomId, isOpen, onClose }) => {
     // Subscribe to room-specific channel
     const channel = pusher.subscribe(`room-${roomId}`);
 
+
+    type MyEventPayload = {
+      message: string;
+      user: {id: number; name: string; email: string };
+      timestamp?: string;
+    }
+
     // Listen for messages
-    channel.bind('my-event', (data: any) => {
+    channel.bind('my-event', (data: MyEventPayload) => {
       const newMessage: Message = {
         id: Date.now().toString() + Math.random().toString(),
         content: data.message,
