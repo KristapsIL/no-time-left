@@ -292,4 +292,3 @@ useEffect(() => {
     </AppLayout>
   );
 }
-
