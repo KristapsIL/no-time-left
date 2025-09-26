@@ -20,33 +20,27 @@ class CardGame extends Model
         'game_started_at' => 'datetime',
     ];
 
-    public function room()
-    {
+    public function room(){
         return $this->belongsTo(Room::class);
     }
 
-    public function canStartGame()
-    {
+    public function canStartGame(){
         return $this->game && $this->game->game_status === 'waiting' && $this->players()->count() >= 2;
     }
 
-    public function currentPlayer()
-    {
+    public function currentPlayer(){
         return $this->belongsTo(User::class, 'current_turn');
     }
 
-    public function isActive()
-    {
+    public function isActive(){
         return in_array($this->game_status, ['starting', 'in_progress']);
     }
 
-    public function isWaiting()
-    {
+    public function isWaiting() {
         return $this->game_status === 'waiting';
     }
 
-    public function isFinished()
-    {
+    public function isFinished() {
         return $this->game_status === 'finished';
     }
 }

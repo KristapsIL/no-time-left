@@ -12,7 +12,7 @@ class RoomRules extends Model
     protected $casts = [
         'rules' => 'array',
     ];
-    public function rooms(){
-        return $this->belongsToMany(Room::class);
+    public function room() {
+        return $this->belongsTo(Room::class);
     }
 }
