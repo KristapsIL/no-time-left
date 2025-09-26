@@ -2,34 +2,21 @@
 
 use Illuminate\Support\Facades\Broadcast;
 
-Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
-    return (int) $user->id === (int) $id;
-});
-
-// Allow all authenticated users to listen to my-channel
-Broadcast::channel('my-channel', function ($user) {
-    return true; // or add your own authorization logic here
-});
-
-Broadcast::channel('room-{roomId}', function ($user, $roomId) {
-    $room = \App\Models\Room::find($roomId);
-    if (!$room) return false;
-
-    $isMember = $room->players()->where('user_id', $user->id)->exists();
-    if (!$isMember) return false;
-
-    return [
-        'id'   => (int) $user->id,
-        'name' => (string) $user->name,
-    ];
-});
-
-Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
-    return (int) $user->id === (int) $id;
-});
-Broadcast::channel('user-{userId}', function ($user, $userId) {
+Broadcast::channel('user.{userId}', function ($user, int $userId) {
+    // Private user channel: allow only the owner
     return (int) $user->id === (int) $userId;
 });
 
+Broadcast::channel('room-{roomId}', function ($user, int $roomId) {
+    // Presence room channel: user must be a member of the room
+    if (! $user->rooms()->whereKey($roomId)->exists()) {
+        return false;
+    }
 
+    // Presence channels must return user info to share presence roster
+    return [
+        'id'   => (int) $user->id,
+        'name' => (string) ($user->name ?? "Player {$user->id}"),
+    ];
+});
 

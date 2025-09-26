@@ -13,6 +13,13 @@ return new class extends Migration
     {
         Schema::create('card_games', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('room_id')->constrained()->cascadeOnDelete();
+            $table->json('deck')->nullable();
+            $table->json('used_cards')->nullable();
+            $table->json('player_hands')->nullable(); 
+            $table->foreignId('current_turn')->nullable();
+            $table->enum('game_status', ['waiting', 'starting', 'in_progress', 'finished'])->default('waiting');
+            $table->timestamp('game_started_at')->nullable();
             $table->timestamps();
         });
     }
