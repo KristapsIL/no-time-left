@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class RoomRules extends Model
 {
     protected $fillable = [
-        'max_players', 'public', 'rules', 'cards_per_player',
+        'max_players', 'public', 'rules', 'cards_per_player', 'room_id'
     ];
     protected $casts = [
         'rules' => 'array',

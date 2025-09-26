@@ -33,9 +33,10 @@ class RoomController extends Controller
             'created_by' => $request->user()->id,
         ]);
         RoomRules::create([
-            'public' => $validated['public'],
+            'room_id'     => $room->id,
+            'public'      => $validated['public'],
             'max_players' => $validated['max_players'],
-            'rules' => $validated['rules'] ?? [],
+            'rules'       => $validated['rules'] ?? [],
         ]);
 
         return redirect()->route('board', ['roomId' => $room->id]);
@@ -86,8 +87,5 @@ class RoomController extends Controller
         ));
 
         return response()->noContent();
-    }
-    public function test(){
-        return Inertia::render('TestEvent');
     }
 }
