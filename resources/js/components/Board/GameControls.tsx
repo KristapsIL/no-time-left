@@ -1,9 +1,15 @@
 import React from 'react';
 
+type Player = {
+    id: number;
+    name?: string | null;
+    email?: string | null;
+};
+
 type Props = {
   roomId: number;
   isStartingGame: boolean;
-  connectedPlayers: any[];
+  connectedPlayers: Player[];
   isChatOpen: boolean;
   toggleChat: () => void;
   leaveGame: () => void;
@@ -12,7 +18,6 @@ type Props = {
 
 
 export const GameControls = ({
-  roomId,
   isStartingGame,
   connectedPlayers,
   isChatOpen,

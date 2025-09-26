@@ -10,8 +10,9 @@ export const isValidPlay = (card: string, top: string | null): boolean => {
   return cv === tv || cs === ts;
 };
 
-export const uniqById = (arr: any[]) => {
-  const m = new Map<string | number, any>();
+type Presence = { id: number; user_id:number };
+export const uniqById = (arr: Presence[]) => {
+  const m = new Map<string | number, unknown>();
   for (const p of arr) m.set(p.id ?? p.user_id ?? p, p);
   return Array.from(m.values());
 };
