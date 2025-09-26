@@ -332,33 +332,41 @@ class CardGameController extends Controller
         return [$value, $suit];
     }
 
-    public function pickUpCard(Request $request, int $roomId)
+    public function pickUpCard(Request $request, int $roomId): RedirectResponse
     {
         $userId = $request->user()->id;
 
-        [$room, $userHand, $handCounts, $deckCount, $turnPlayerId] =
+        [$game, $userHand, $handCounts, $deckCount, $turnPlayerId] =
             DB::transaction(function () use ($roomId, $userId) {
-                $room = Room::whereKey($roomId)->lockForUpdate()->firstOrFail();
+                $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
+                $game = $room->game;
 
-                if ($userId !== $room->current_turn) abort(422, 'Not your turn');
+                if (!$game) {
+                    abort(422, 'Game not initialized.');
+                }
 
-                $hands = $room->player_hands ?? [];
-                $deck  = $room->deck ?? [];
+                if ($userId !== $game->current_turn) {
+                    abort(422, 'Not your turn.');
+                }
 
-                if (empty($deck)) abort(422, 'No more cards in deck');
+                $hands = $game->player_hands ?? [];
+                $deck  = $game->deck ?? [];
+
+                if (empty($deck)) {
+                    abort(422, 'No more cards in deck.');
+                }
 
                 $drawn = array_shift($deck);
                 $hands[(string)$userId][] = $drawn;
 
-                $room->player_hands = $hands;
-                $this->updateDeckState($room, $deck, $room->used_cards ?? []);
-                $room->save();
+                $game->player_hands = $hands;
+                $this->updateDeckState($game, $deck, $game->used_cards ?? []);
+                $game->save();
 
-                $handCounts = [];
-                foreach ($hands as $pid => $h) $handCounts[$pid] = count($h);
+                $handCounts = collect($hands)->map(fn($h) => count($h))->toArray();
                 $deckCount  = count($deck);
 
-                return [$room, $hands[(string)$userId], $handCounts, $deckCount, $room->current_turn];
+                return [$game, $hands[(string)$userId], $handCounts, $deckCount, $game->current_turn];
             });
 
         broadcast(new HandSynced(
@@ -367,10 +375,10 @@ class CardGameController extends Controller
         ));
 
         broadcast(new CardPlayed(
-            roomId:       $room->id,
+            roomId:       $game->room_id,
             userId:       $userId,
-            card:         '',
-            usedCards:    $room->used_cards ?? [],
+            card:         '', // empty since it's a pickup
+            usedCards:    $game->used_cards ?? [],
             handCounts:   $handCounts,
             turnPlayerId: $turnPlayerId,
             deckCount:    $deckCount
@@ -378,34 +386,37 @@ class CardGameController extends Controller
 
         return back();
     }
+
     public function resyncState(Request $request, int $roomId)
     {
         $userId = $request->user()->id;
 
-        $room = Room::with('players')->findOrFail($roomId);
+        $room = Room::with(['players', 'game'])->findOrFail($roomId);
+        $game = $room->game;
 
-        // Make sure user is in the room
+        // Pārbaude: vai lietotājs ir istabā
         if (!$room->players()->where('users.id', $userId)->exists()) {
             abort(403, 'You must join this room first.');
         }
 
-        $hands = $room->player_hands ?? [];
-        $usedCards = $room->used_cards ?? [];
-        $handCounts = [];
-
-        foreach ($hands as $pid => $h) {
-            $handCounts[$pid] = count($h);
+        if (!$game) {
+            abort(422, 'Game not initialized.');
         }
 
+        $hands = $game->player_hands ?? [];
+        $usedCards = $game->used_cards ?? [];
+        $handCounts = collect($hands)->map(fn($h) => count($h))->toArray();
+
         return response()->json([
-            'hand'           => $hands[(string)$userId] ?? [],
-            'hand_counts'    => $handCounts,
-            'deck_count'     => count($room->deck ?? []),
-            'used_cards'     => $usedCards,
-            'current_turn'   => $room->current_turn,
-            'game_status'    => $room->game_status,
+            'hand'         => $hands[(string)$userId] ?? [],
+            'hand_counts'  => $handCounts,
+            'deck_count'   => count($game->deck ?? []),
+            'used_cards'   => $usedCards,
+            'current_turn' => $game->current_turn,
+            'game_status'  => $game->game_status,
         ]);
     }
+
 
 
 }
