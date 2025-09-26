@@ -13,15 +13,23 @@ import { playCardApi, pickupCardApi } from '@/utils/api';
 
 type Player = { id: number; name?: string };
 
+
+type RoomRules = {
+  public: boolean;
+  max_players: number;
+  rules: string[];
+};
+
 type Room = {
   id: number;
   code: string;
-  rules: string[];
+  rules: RoomRules;
   player_hands?: Record<string, string[]>;
   used_cards?: string[];
   game_status?: 'waiting' | 'in_progress' | 'finished';
   players?: Player[];
 };
+
 
 type Props = {
   room: Room;
@@ -136,7 +144,7 @@ export default function Board() {
   useEffect(() => {
     if (!echo) return;
 
-    const privateChannel = echo.private(`user-${userId}`);
+    const privateChannel = echo.private(`user.${userId}`);
     privateChannelRef.current = privateChannel;
 
     privateChannel.listen('.hand-synced', (data: { hand: string[] }) => {
