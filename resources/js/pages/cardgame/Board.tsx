@@ -8,7 +8,7 @@ import { OtherPlayers } from '@/components/Board/OtherPlayers';
 import { Deck } from '@/components/Board/Deck';
 import { TopCard } from '@/components/Board/TopCard';
 import { GameControls } from '@/components/Board/GameControls';
-import { isValidPlay, uniqById} from '@/utils/gameLogic';
+import { isValidPlay} from '@/utils/gameLogic';
 import { playCardApi, pickupCardApi } from '@/utils/api';
 
 type Player = { id: number; name?: string };
@@ -146,7 +146,9 @@ export default function Board() {
     return () => {
       try {
         echo.leave(`room-${room.id}`);
-      } catch {}
+      } catch (err) {
+        console.log(err);
+      }
       roomChannelRef.current = null;
     };
   }, [room.id]);
@@ -186,11 +188,15 @@ useEffect(() => {
     // Pusher-style
     (echo as any)?.connector?.pusher?.connection?.bind('connected', resync);
     (echo as any)?.connector?.pusher?.connection?.bind('reconnected', resync);
-  } catch {}
+  } catch (err) {
+        console.log(err);
+  }
   try {
     // Reverb/Ably may expose different hooks; call resync after connection open if available
     (echo as any)?.connector?.socket?.addEventListener?.('open', resync);
-  } catch {}
+  } catch (err) {
+        console.log(err);
+  }
 
   return () => {
     window.removeEventListener('focus', onFocus);
@@ -199,7 +205,9 @@ useEffect(() => {
       (echo as any)?.connector?.pusher?.connection?.unbind('connected', resync);
       (echo as any)?.connector?.pusher?.connection?.unbind('reconnected', resync);
       (echo as any)?.connector?.socket?.removeEventListener?.('open', resync);
-    } catch {}
+    } catch (err) {
+        console.log(err);
+  }
   };
 }, [resync]);
 
@@ -218,7 +226,7 @@ useEffect(() => {
         headers: {
           'X-Socket-Id': (echo)?.socketId?.() ?? '',
         },
-        onError: (errors) => {
+        onError: () => {
           setIsStartingGame(false);
         },
         onFinish: () => {
