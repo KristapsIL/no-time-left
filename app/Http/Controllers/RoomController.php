@@ -22,25 +22,30 @@ class RoomController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'room_name' => ['required', 'min:3', 'max:255'],
-            'public' => ['required', 'boolean'],
-            'max_players' => ['required', 'integer', 'min:2', 'max:4'],
-            'rules' => ['nullable', 'array'],
-        ]);
-        $room = Room::create([
-            'room_name' => $validated['room_name'],
-            'room_code' => $this->uniqueCode(),
-            'created_by' => $request->user()->id,
-        ]);
-        RoomRules::create([
-            'room_id'     => $room->id,
-            'public'      => $validated['public'],
-            'max_players' => $validated['max_players'],
-            'rules'       => $validated['rules'] ?? [],
+            'room_name'    => ['required', 'min:3', 'max:255'],
+            'public'       => ['required', 'boolean'],
+            'max_players'  => ['required', 'integer', 'min:2', 'max:4'],
+            'rules'        => ['nullable', 'array'],
         ]);
 
-        return redirect()->route('board', ['roomId' => $room->id]);
+        return DB::transaction(function () use ($request, $validated) {
+            $room = Room::create([
+                'room_name' => $validated['room_name'],
+                'room_code' => $this->uniqueCode(),
+                'created_by'=> $request->user()->id,
+            ]);
+
+            RoomRules::create([
+                'room_id'     => $room->id,
+                'public'      => $validated['public'],
+                'max_players' => $validated['max_players'],
+                'rules'       => $validated['rules'] ?? [],
+            ]);
+
+            return redirect()->route('board', ['roomId' => $room->id]);
+        });
     }
+
 
     private function uniqueCode(): string
     {

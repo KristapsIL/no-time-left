@@ -18,7 +18,7 @@ export const playCardApi = async (roomId: number, card: string) => {
 
 export const pickupCardApi = async (roomId: number) => {
   const res = await fetch(`/board/${roomId}/pickup`, {
-    method: 'PUT',
+    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-CSRF-TOKEN': getCsrf(),
@@ -41,3 +41,4 @@ export const resyncStateApi = async (roomId: number) => {
   if (!res.ok) throw await res.json();
   return res.json();
 };
+

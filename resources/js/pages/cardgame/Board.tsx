@@ -8,7 +8,7 @@ import { OtherPlayers } from '@/components/Board/OtherPlayers';
 import { Deck } from '@/components/Board/Deck';
 import { TopCard } from '@/components/Board/TopCard';
 import { GameControls } from '@/components/Board/GameControls';
-import { isValidPlay, uniqById } from '@/utils/gameLogic';
+import { isValidPlay, uniqById} from '@/utils/gameLogic';
 import { playCardApi, pickupCardApi } from '@/utils/api';
 
 type Player = { id: number; name?: string };
@@ -141,23 +141,57 @@ export default function Board() {
   }, [room.id]);
 
   // --- Private user channel: subscribe once per userId
-  useEffect(() => {
-    if (!echo) return;
-
-    const privateChannel = echo.private(`user.${userId}`);
-    privateChannelRef.current = privateChannel;
-
-    privateChannel.listen('.hand-synced', (data: { hand: string[] }) => {
-      setHand(data.hand ?? []);
+// helper
+const resync = useCallback(async () => {
+  try {
+    const res = await fetch(`/board/${room.id}/resync-state`, {
+      method: 'GET', // or GET if your route is GET
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '',
+      },
     });
+    if (!res.ok) return; // optionally handle errors
+    const data = await res.json();
+    setHand(data.hand ?? []);
+    setHandCounts(data.hand_counts ?? {});
+    setDeckCount(data.deck_count ?? 0);
+    setTopCard((data.used_cards ?? []).at(-1) ?? null);
+    setCurrentTurn(data.current_turn ?? null);
+  } catch (e) {
+    console.error('resync failed', e);
+  }
+}, [room.id]);
 
-    return () => {
-      try {
-        echo.leave(`user-${userId}`);
-      } catch {}
-      privateChannelRef.current = null;
-    };
-  }, [userId]);
+useEffect(() => {
+  const onFocus = () => resync();
+  const onVisible = () => { if (document.visibilityState === 'visible') resync(); };
+
+  window.addEventListener('focus', onFocus);
+  document.addEventListener('visibilitychange', onVisible);
+
+  // Pusher/Reverb reconnect hooks (guard for whichever driver you use)
+  try {
+    // Pusher-style
+    (echo as any)?.connector?.pusher?.connection?.bind('connected', resync);
+    (echo as any)?.connector?.pusher?.connection?.bind('reconnected', resync);
+  } catch {}
+  try {
+    // Reverb/Ably may expose different hooks; call resync after connection open if available
+    (echo as any)?.connector?.socket?.addEventListener?.('open', resync);
+  } catch {}
+
+  return () => {
+    window.removeEventListener('focus', onFocus);
+    document.removeEventListener('visibilitychange', onVisible);
+    try {
+      (echo as any)?.connector?.pusher?.connection?.unbind('connected', resync);
+      (echo as any)?.connector?.pusher?.connection?.unbind('reconnected', resync);
+      (echo as any)?.connector?.socket?.removeEventListener?.('open', resync);
+    } catch {}
+  };
+}, [resync]);
+
 
   // ----- Start game -----
   const startGame = useCallback(() => {

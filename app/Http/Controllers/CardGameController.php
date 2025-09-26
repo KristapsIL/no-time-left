@@ -19,44 +19,68 @@ use App\Events\HandSynced;
 
 class CardGameController extends Controller
 {
-    public function board(Request $request, int $roomId): Response|RedirectResponse
-    {
-        $inRoom = $request->user()
-            ->rooms()
-            ->where('rooms.id', $roomId)
-            ->exists();
 
-        if (!$inRoom) {
+
+
+    public function board(Request $request, int $roomId)
+    {
+        $user = $request->user();
+
+        // 1) Authorization: user must be in the room
+        $inRoom = $user->rooms()->where('rooms.id', $roomId)->exists();
+        if (! $inRoom) {
             return redirect()
                 ->route('findRoom')
                 ->with('error', 'Join the room before opening the board.');
         }
 
-        $room = Room::with(['players']) // preload players for UI seating if needed
-            ->findOrFail($roomId);
+        // 2) Ensure "room + game" atomically; no duplicate CardGame under concurrency
+        [$room, $game] = DB::transaction(function () use ($roomId) {
+            // Lock the room row so two users can't create two games
+            $room = Room::query()
+                ->whereKey($roomId)
+                ->with(['players', 'rules'])    // eager-load for the UI
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $game = $room->game;
+            // unique index on card_games.room_id recommended (see migration below)
+            $game = CardGame::firstOrCreate(
+                ['room_id' => $room->id],
+                [
+                    'deck'        => $this->buildDeck(),
+                    'game_status' => 'waiting',
+                ]
+            );
 
-        if (!$game) {
-            $game = CardGame::create([
-                'room_id' => $room->id,
-                'deck' => $this->buildDeck(),
-                'game_status' => 'waiting',
-            ]);
-        }
-        if (empty($game->deck) && $game->game_status === 'waiting') {
-            $game->deck = $this->buildDeck();
-            $game->save();
-        }
+            // If game existed but deck is empty (e.g., manual DB changes), re-seed while waiting
+            if ($game->game_status === 'waiting' && empty($game->deck)) {
+                $game->deck = $this->buildDeck();
+                $game->save();
+            }
+
+            return [$room, $game];
+        });
+
+        // 3) Privacy-preserving payload for the client
+        $playerHands = $game->player_hands ?? [];
+        $myHand      = $playerHands[$user->id] ?? [];
+        $handCounts  = collect($playerHands)->map(fn ($cards) => is_array($cards) ? count($cards) : 0);
+
+        // If your Room model has an accessor getCodeAttribute() returning room_code,
+        // the "code" field will be present automatically. Alternatively, map it explicitly below.
+        $roomArray = $room->toArray();
+        $roomArray['code'] = $room->room_code; // remove if you added an accessor
 
         return Inertia::render('cardgame/Board', [
-            'room'   => $room,
-            'rules'  => $room->rules,
-            'deck'   => $game->deck ?? [],
-            'userId' => $request->user()->id,
+            'room'       => $roomArray,                 // contains id, code, rules, players
+            'deck'       => $game->deck ?? [],
+            'usedCards'  => $game->used_cards ?? [],
+            'handCounts' => $handCounts,                // { userId: count }
+            'myHand'     => array_values($myHand),      // only my hand
+            'userId'     => $user->id,
         ]);
-
     }
+
 
     public function shuffle(int $roomId): RedirectResponse
     {
@@ -304,14 +328,22 @@ class CardGameController extends Controller
             handCounts:   $handCounts,
             turnPlayerId: $turnPlayerId,
             deckCount:    $deckCount
-        ))->toOthers();
+        ));
 
         broadcast(new HandSynced(
             userId: $userId,
             hand:   $actingHand
         ));
 
-        return response()->noContent();
+        return response()->json([
+            'success'      => true,
+            'hand'         => $actingHand ?? null,
+            'hand_counts'  => $handCounts ?? [],
+            'deck_count'   => $deckCount ?? 0,
+            'used_cards'   => $usedCards ?? [],
+            'current_turn' => $turnPlayerId ?? null,
+            'game_status'  => $game->game_status ?? null,
+        ]);
     }
 
     protected function isValidPlay(string $card, string $topCard): bool
@@ -332,7 +364,7 @@ class CardGameController extends Controller
         return [$value, $suit];
     }
 
-    public function pickUpCard(Request $request, int $roomId): RedirectResponse
+    public function pickUpCard(Request $request, int $roomId)
     {
         $userId = $request->user()->id;
 
@@ -384,7 +416,15 @@ class CardGameController extends Controller
             deckCount:    $deckCount
         ))->toOthers();
 
-        return back();
+        return response()->json([
+            'success'      => true,
+            'hand'         => $actingHand ?? null,
+            'hand_counts'  => $handCounts ?? [],
+            'deck_count'   => $deckCount ?? 0,
+            'used_cards'   => $usedCards ?? [],
+            'current_turn' => $turnPlayerId ?? null,
+            'game_status'  => $game->game_status ?? null,
+        ]);
     }
 
     public function resyncState(Request $request, int $roomId)
