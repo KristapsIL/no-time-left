@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('room_name');
             $table->string('room_code')->unique();
-            $table->foreignId('created_by');
+            $table->foreignId('created_by')->constrained('users')->cascadeOnDelete();
             $table->timestamps();
         });
     }
