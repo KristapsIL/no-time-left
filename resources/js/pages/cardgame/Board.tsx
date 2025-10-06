@@ -106,6 +106,7 @@ export default function Board() {
         name: m.name ?? `Player ${m.id}`,
       }));
       setConnectedPlayers(uniqById(players));
+      resync();
     });
 
     roomChannel.joining((member: any) => {
@@ -142,6 +143,14 @@ export default function Board() {
       if (Number.isInteger(deckC)) setDeckCount(deckC as number);
       if (Number.isInteger(turn)) setCurrentTurn(turn as number);
     });
+    roomChannel.listen('.hand-synced', (data: any) => {
+    if (data.userId === userId) {
+        setHand(data.hand ?? []);
+        setHandCounts(data.hand_counts ?? {});
+        setDeckCount(data.deck_count ?? 0);
+    }
+    });
+
 
     return () => {
       try {
@@ -238,31 +247,39 @@ useEffect(() => {
   }, [isStartingGame, room.id]);
 
   // ----- Play card -----
-  const playCard = useCallback(
-    async (card: string) => {
-      if (!isMyTurn || !isValidPlay(card, topCard)) return;
-      try {
-        await playCardApi(room.id, card);
-        // Optimistic update; server event will reconcile
-        setHand(prev => prev.filter(c => c !== card));
-        setTopCard(card);
-      } catch (err) {
-        console.error(err);
-      }
-    },
-    [isMyTurn, topCard, room.id]
-  );
-
-  // ----- Pickup card -----
-  const pickupCard = useCallback(async () => {
-    if (!isMyTurn) return;
+const playCard = useCallback(
+  async (card: string) => {
+    if (!isMyTurn || !isValidPlay(card, topCard)) return;
     try {
-      await pickupCardApi(room.id);
-      // Server should push new hand via `.hand-synced`
+      await playCardApi(room.id, card);
+
+      // Optimistic updates:
+      setHand(prev => prev.filter(c => c !== card));
+      setTopCard(card);
+      
+      // Add these two lines:
+      setHandCounts(prev => ({ ...prev, [uid]: (prev[uid] ?? hand.length) - 1 }));
+      setDeckCount(prev => prev - 1);
+
     } catch (err) {
       console.error(err);
     }
-  }, [isMyTurn, room.id]);
+  },
+  [isMyTurn, topCard, room.id, uid, hand.length]
+);
+
+
+  // ----- Pickup card -----
+const pickupCard = useCallback(async () => {
+  if (!isMyTurn) return;
+
+  try {
+    await pickupCardApi(room.id);
+    // No UI update here — the server event will push the updated hand & deck
+  } catch (err) {
+    console.error('Failed to pick up card:', err);
+  }
+}, [isMyTurn, room.id]);
 
   // ----- Leave game -----
   const leaveGame = useCallback(() => {
