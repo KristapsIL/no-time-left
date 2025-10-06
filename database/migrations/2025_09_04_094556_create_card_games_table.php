@@ -17,7 +17,7 @@ return new class extends Migration
             $table->json('deck')->nullable();
             $table->json('used_cards')->nullable();
             $table->json('player_hands')->nullable(); 
-            $table->foreignId('current_turn')->constrained('users')->nullable();
+            $table->foreignId('current_turn')->nullable()->constrained('users');
             $table->enum('game_status', ['waiting', 'starting', 'in_progress', 'finished'])->default('waiting');
             $table->timestamp('game_started_at')->nullable();
             $table->timestamps();
