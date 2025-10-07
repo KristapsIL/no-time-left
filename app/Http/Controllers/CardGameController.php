@@ -19,9 +19,6 @@ use App\Events\HandSynced;
 
 class CardGameController extends Controller
 {
-
-
-
     public function board(Request $request, int $roomId)
     {
         $user = $request->user();
@@ -396,7 +393,4 @@ class CardGameController extends Controller
             'game_status'  => $game->game_status,
         ]);
     }
-
-
-
 }

@@ -1,16 +1,28 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+// Board.tsx
+import React, {
+  useReducer,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  startTransition,
+} from 'react';
 import { router, usePage } from '@inertiajs/react';
+
 import AppLayout from '@/layouts/app-layout';
 import RoomChat from '@/components/RoomChat';
-import echo from '@/lib/echo';
 import { PlayerHand } from '@/components/Board/PlayerHand';
 import { OtherPlayers } from '@/components/Board/OtherPlayers';
 import { Deck } from '@/components/Board/Deck';
 import { TopCard } from '@/components/Board/TopCard';
 import { GameControls } from '@/components/Board/GameControls';
-import { isValidPlay} from '@/utils/gameLogic';
-import { playCardApi, pickupCardApi } from '@/utils/api';
 
+import echo from '@/lib/echo';
+import { isValidPlay } from '@/utils/gameLogic';
+import { playCardApi, pickupCardApi, resyncStateApi } from '@/utils/api';
+
+// ---------- Types ----------
 type Player = { id: number; name?: string };
 
 type RoomRules = {
@@ -29,7 +41,6 @@ type Room = {
   players?: Player[];
 };
 
-
 type Props = {
   room: Room;
   deck: string[];
@@ -41,7 +52,6 @@ type GameStartedPayload = {
   deckCount?: number;
   handCounts?: Record<string, number>;
   usedCards?: string[];
-  // snake_case fallbacks
   turn_player_id?: number;
   deck_count?: number;
   hand_counts?: Record<string, number>;
@@ -53,11 +63,69 @@ type CardPlayedPayload = {
   handCounts?: Record<string, number>;
   deckCount?: number;
   turnPlayerId?: number;
-  // snake_case fallbacks
   used_cards?: string[];
   hand_counts?: Record<string, number>;
   deck_count?: number;
   turn_player_id?: number;
+};
+
+type HandSyncedPayload = {
+  userId: number;
+  hand?: string[];
+  hand_counts?: Record<string, number>;
+  deck_count?: number;
+  used_cards?: string[];
+};
+
+// ---------- Helpers ----------
+function uniqById<T extends { id?: string | number; user_id?: string | number }>(arr: T[]): T[] {
+  const map = new Map<string, T>();
+  for (const item of arr) {
+    const raw = item.id ?? item.user_id;
+    if (raw !== undefined) map.set(String(raw), item);
+  }
+  return [...map.values()];
+}
+
+function removeOne<T>(arr: T[], predicate: (x: T) => boolean): T[] {
+  const idx = arr.findIndex(predicate);
+  if (idx === -1) return arr;
+  const next = arr.slice();
+  next.splice(idx, 1);
+  return next;
+}
+
+// ---------- Reducer ----------
+type GameState = {
+  hand: string[];
+  deckCount: number;
+  topCard: string | null;
+  handCounts: Record<string, number>;
+  currentTurn: number | null;
+};
+
+type Action =
+  | { type: 'SERVER_SYNC'; payload: Partial<GameState> }
+  | { type: 'SET_TURN'; turn: number | null };
+
+function gameReducer(state: GameState, action: Action): GameState {
+  switch (action.type) {
+    case 'SERVER_SYNC':
+      return { ...state, ...action.payload };
+    case 'SET_TURN':
+      return { ...state, currentTurn: action.turn };
+    default:
+      return state;
+  }
+}
+
+// Echo channel (minimal typing)
+type AnyChannel = {
+  here: (cb: (members: unknown[]) => void) => AnyChannel;
+  joining: (cb: (member: unknown) => void) => AnyChannel;
+  leaving: (cb: (member: unknown) => void) => AnyChannel;
+  listen: (event: string, cb: (payload: unknown) => void) => AnyChannel;
+  stopListening: (event: string) => AnyChannel;
 };
 
 export default function Board() {
@@ -65,166 +133,251 @@ export default function Board() {
   const { room, deck, userId } = props;
   const uid = String(userId);
 
-  const [hand, setHand] = useState<string[]>(room.player_hands?.[uid] ?? []);
-  const [deckCount, setDeckCount] = useState<number>(deck?.length ?? 0);
-  const [topCard, setTopCard] = useState<string | null>(room.used_cards?.at(-1) ?? null);
-  const [connectedPlayers, setConnectedPlayers] = useState<Room['players']>(room.players ?? []);
-  const [handCounts, setHandCounts] = useState<Record<string, number>>({});
-  const [currentTurn, setCurrentTurn] = useState<number | null>(null);
+  const [game, dispatch] = useReducer(gameReducer, {
+    hand: room.player_hands?.[uid] ?? [],
+    deckCount: deck?.length ?? 0,
+    topCard: room.used_cards?.at(-1) ?? null,
+    handCounts: {},
+    currentTurn: null,
+  });
+
+  // Keep a ref to the latest game state for async handlers
+  const gameRef = useRef(game);
+  useEffect(() => {
+    gameRef.current = game;
+  }, [game]);
+
+  const [connectedPlayers, setConnectedPlayers] = useState<Player[]>(room.players ?? []);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
+  const isMyTurn = useMemo(() => game.currentTurn === userId, [game.currentTurn, userId]);
 
-  const isMyTurn = useMemo(() => currentTurn === userId, [currentTurn, userId]);
+  // ----- Event handlers (accept unknown, cast inside) -----
+  const onGameStarted = (raw: unknown) => {
+    const data = raw as GameStartedPayload;
+    const turn = data.turnPlayerId ?? data.turn_player_id ?? null;
+    const deckC = data.deckCount ?? data.deck_count ?? 0;
+    const counts = data.handCounts ?? data.hand_counts ?? {};
+    const used = (data.usedCards ?? data.used_cards) ?? [];
 
-    type AnyChannel = {
-    listen: (event: string, cb: (payload: unknown) => void) => AnyChannel;
-    stopListening: (event: string, cb?: (payload: unknown) => void) => AnyChannel;
-    };
-    const roomChannelRef = useRef<AnyChannel | null>(null);
+    dispatch({
+      type: 'SERVER_SYNC',
+      payload: {
+        deckCount: deckC,
+        handCounts: counts,
+        topCard: used.at(-1) ?? gameRef.current.topCard,
+      },
+    });
+    dispatch({ type: 'SET_TURN', turn });
+    setIsStartingGame(false);
+  };
 
-     // Helper: unique members by id/user_id
-    function uniqById<T extends { id?: string|number; user_id?: string|number }>(arr: T[]): T[] {
-        const map = new Map<string, T>();
-        for (const item of arr) {
-            const raw = item.id ?? item.user_id;
-            if (raw !== undefined) map.set(String(raw), item);
-        }
-        return [...map.values()];
-    }
+  const onCardPlayed = (raw: unknown) => {
+    const data = raw as CardPlayedPayload;
+    const used = (data.usedCards ?? data.used_cards) ?? [];
+    const latestTop = used.length ? used[used.length - 1] : undefined;
+    const counts = data.handCounts ?? data.hand_counts;
+    const deckC = data.deckCount ?? data.deck_count;
+    const turn = data.turnPlayerId ?? data.turn_player_id;
 
-  // --- Presence room channel: subscribe once per room.id
+    const patch: Partial<GameState> = {};
+    if (latestTop) patch.topCard = latestTop;
+    if (counts) patch.handCounts = { ...counts };
+    if (typeof deckC === 'number') patch.deckCount = deckC;
+
+    if (Object.keys(patch).length) dispatch({ type: 'SERVER_SYNC', payload: patch });
+    if (typeof turn === 'number') dispatch({ type: 'SET_TURN', turn });
+  };
+
+  const onHandSynced = (raw: unknown) => {
+    const data = raw as HandSyncedPayload;
+    if (data.userId !== userId) return;
+
+    startTransition(() => {
+      dispatch({
+        type: 'SERVER_SYNC',
+        payload: {
+          hand: data.hand ?? gameRef.current.hand,
+          handCounts: data.hand_counts ?? gameRef.current.handCounts,
+          deckCount: typeof data.deck_count === 'number' ? data.deck_count : gameRef.current.deckCount,
+          topCard: (data.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
+        },
+      });
+    });
+  };
+
+  // ----- Echo subscribe -----
   useEffect(() => {
     if (!echo) return;
 
-    const roomChannel = echo.join(`room-${room.id}`);
-    roomChannelRef.current = roomChannel;
+    const channel = (echo as any).join?.(`room-${room.id}`) as AnyChannel | undefined;
+    if (!channel) return;
 
-    // Normalize members to { id, name }
-    roomChannel.here((members: any[]) => {
-      const players: Player[] = (members ?? []).map(m => ({
+    channel.here((members: any[]) => {
+      const players: Player[] = (members ?? []).map((m) => ({
         id: m.id,
         name: m.name ?? `Player ${m.id}`,
       }));
       setConnectedPlayers(uniqById(players));
-      resync();
     });
 
-    roomChannel.joining((member: any) => {
+    channel.joining((member: any) => {
       const player: Player = { id: member.id, name: member.name ?? `Player ${member.id}` };
-      setConnectedPlayers(prev => uniqById([...(prev ?? []), player]));
+      setConnectedPlayers((prev) => uniqById([...(prev ?? []), player]));
     });
 
-    roomChannel.leaving((member: any) => {
-      setConnectedPlayers(prev => (prev ?? []).filter(p => p.id !== member.id));
+    channel.leaving((member: any) => {
+      setConnectedPlayers((prev) => (prev ?? []).filter((p) => p.id !== member.id));
     });
 
-    // Game events
-    roomChannel.listen('.game-started', (data: GameStartedPayload) => {
-      const turn = data.turnPlayerId ?? data.turn_player_id ?? null;
-      const deckC = data.deckCount ?? data.deck_count ?? 0;
-      const counts = data.handCounts ?? data.hand_counts ?? {};
-      const used = (data.usedCards ?? data.used_cards) ?? [];
-
-      setIsStartingGame(false);
-      setCurrentTurn(turn);
-      setDeckCount(deckC);
-      setHandCounts(counts);
-      setTopCard(used.at(-1) ?? null);
-    });
-
-    roomChannel.listen('.card-played', (data: CardPlayedPayload) => {
-      const used = (data.usedCards ?? data.used_cards) ?? [];
-      const counts = data.handCounts ?? data.hand_counts;
-      const deckC = data.deckCount ?? data.deck_count;
-      const turn = data.turnPlayerId ?? data.turn_player_id;
-
-      setTopCard(prev => used.at(-1) ?? prev);
-      if (counts) setHandCounts({ ...counts });
-      if (Number.isInteger(deckC)) setDeckCount(deckC as number);
-      if (Number.isInteger(turn)) setCurrentTurn(turn as number);
-    });
-    roomChannel.listen('.hand-synced', (data: any) => {
-    if (data.userId === userId) {
-        setHand(data.hand ?? []);
-        setHandCounts(data.hand_counts ?? {});
-        setDeckCount(data.deck_count ?? 0);
-    }
-    });
-
+    channel.listen('.game-started', onGameStarted);
+    channel.listen('.card-played', onCardPlayed);
+    channel.listen('.hand-synced', onHandSynced);
 
     return () => {
       try {
-        echo.leave(`room-${room.id}`);
+        channel.stopListening('.game-started');
+        channel.stopListening('.card-played');
+        channel.stopListening('.hand-synced');
+        (echo as any).leave?.(`room-${room.id}`);
       } catch (err) {
         console.log(err);
       }
-      roomChannelRef.current = null;
     };
   }, [room.id]);
 
-  // --- Private user channel: subscribe once per userId
-// helper
-const resync = useCallback(async () => {
+  // ----- Initial resync (optional but handy) -----
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await resyncStateApi(room.id);
+        if (cancelled) return;
+        dispatch({
+          type: 'SERVER_SYNC',
+          payload: {
+            hand: data.hand ?? gameRef.current.hand,
+            handCounts: data.hand_counts ?? gameRef.current.handCounts,
+            deckCount: typeof data.deck_count === 'number' ? data.deck_count : gameRef.current.deckCount,
+            topCard: (data.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
+          },
+        });
+        dispatch({ type: 'SET_TURN', turn: data.current_turn ?? null });
+      } catch (e) {
+        console.error('resync failed', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [room.id]);
+
+  // ----- Actions -----
+  const lastSnapshotRef = useRef<GameState | null>(null);
+  const lastPickupPlaceholderRef = useRef<string | null>(null);
+
+  const playCard = useCallback(
+    async (card: string) => {
+      if (!isMyTurn || !isValidPlay(card, gameRef.current.topCard)) return;
+
+      // Snapshot before optimistic update
+      lastSnapshotRef.current = gameRef.current;
+
+      // Optimistic remove one card + set top card + adjust my count; do NOT touch deckCount
+      const cur = gameRef.current;
+      const idx = cur.hand.indexOf(card);
+      const nextHand = idx >= 0 ? [...cur.hand.slice(0, idx), ...cur.hand.slice(idx + 1)] : cur.hand;
+      const myCountBefore = cur.handCounts[uid] ?? cur.hand.length;
+
+      dispatch({
+        type: 'SERVER_SYNC',
+        payload: {
+          hand: nextHand,
+          topCard: card,
+          handCounts: { ...cur.handCounts, [uid]: Math.max(myCountBefore - 1, 0) },
+        },
+      });
+
+      try {
+        await playCardApi(room.id, card);
+        // success: server will broadcast .card-played; nothing else needed
+      } catch (err) {
+        console.error('Failed to play card:', err);
+        if (lastSnapshotRef.current) {
+          dispatch({ type: 'SERVER_SYNC', payload: lastSnapshotRef.current });
+        }
+      }
+    },
+    [isMyTurn, room.id, uid],
+  );
+// Keep a ref to avoid double-click spam
+const pickingUpRef = useRef(false);
+
+const pickupCard = useCallback(async () => {
+  if (!isMyTurn || pickingUpRef.current) return;
+  pickingUpRef.current = true;
+
   try {
-    const res = await fetch(`/board/${room.id}/resync-state`, {
-      method: 'GET', // or GET if your route is GET
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '',
-      },
+    const data = await pickupCardApi(room.id);
+
+    // Case 1: server returns full state (preferred)
+    if (data && Array.isArray(data.hand)) {
+      startTransition(() => {
+        dispatch({
+          type: 'SERVER_SYNC',
+          payload: {
+            hand: data.hand,
+            handCounts: data.hand_counts ?? gameRef.current.handCounts,
+            deckCount:
+              typeof data.deck_count === 'number' ? data.deck_count : gameRef.current.deckCount,
+            topCard: (data.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
+          },
+        });
+      });
+      return;
+    }
+
+    // Case 2: server returns only the card (and maybe counts)
+    if (data && typeof data.card === 'string') {
+      const cur = gameRef.current;
+      startTransition(() => {
+        dispatch({
+          type: 'SERVER_SYNC',
+          payload: {
+            hand: [...cur.hand, data.card],
+            handCounts: data.hand_counts ?? cur.handCounts,
+            deckCount: typeof data.deck_count === 'number' ? data.deck_count : cur.deckCount,
+          },
+        });
+      });
+      return;
+    }
+
+    // Case 3: empty success (204) → resync
+    const fresh = await resyncStateApi(room.id);
+    startTransition(() => {
+      dispatch({
+        type: 'SERVER_SYNC',
+        payload: {
+          hand: fresh.hand ?? gameRef.current.hand,
+          handCounts: fresh.hand_counts ?? gameRef.current.handCounts,
+          deckCount:
+            typeof fresh.deck_count === 'number' ? fresh.deck_count : gameRef.current.deckCount,
+          topCard: (fresh.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
+        },
+      });
+      dispatch({ type: 'SET_TURN', turn: fresh.current_turn ?? gameRef.current.currentTurn });
     });
-    if (!res.ok) return; // optionally handle errors
-    const data = await res.json();
-    setHand(data.hand ?? []);
-    setHandCounts(data.hand_counts ?? {});
-    setDeckCount(data.deck_count ?? 0);
-    setTopCard((data.used_cards ?? []).at(-1) ?? null);
-    setCurrentTurn(data.current_turn ?? null);
-  } catch (e) {
-    console.error('resync failed', e);
-  }
-}, [room.id]);
-
-useEffect(() => {
-  const onFocus = () => resync();
-  const onVisible = () => { if (document.visibilityState === 'visible') resync(); };
-
-  window.addEventListener('focus', onFocus);
-  document.addEventListener('visibilitychange', onVisible);
-
-  // Pusher/Reverb reconnect hooks (guard for whichever driver you use)
-  try {
-    // Pusher-style
-    (echo as any)?.connector?.pusher?.connection?.bind('connected', resync);
-    (echo as any)?.connector?.pusher?.connection?.bind('reconnected', resync);
   } catch (err) {
-        console.log(err);
+    console.error('Failed to pick up card:', err);
+    // No placeholder added → nothing to remove. Optionally show a toast.
+  } finally {
+    pickingUpRef.current = false;
   }
-  try {
-    // Reverb/Ably may expose different hooks; call resync after connection open if available
-    (echo as any)?.connector?.socket?.addEventListener?.('open', resync);
-  } catch (err) {
-        console.log(err);
-  }
+}, [isMyTurn, room.id]);
 
-  return () => {
-    window.removeEventListener('focus', onFocus);
-    document.removeEventListener('visibilitychange', onVisible);
-    try {
-      (echo as any)?.connector?.pusher?.connection?.unbind('connected', resync);
-      (echo as any)?.connector?.pusher?.connection?.unbind('reconnected', resync);
-      (echo as any)?.connector?.socket?.removeEventListener?.('open', resync);
-    } catch (err) {
-        console.log(err);
-  }
-  };
-}, [resync]);
-
-
-  // ----- Start game -----
   const startGame = useCallback(() => {
     if (isStartingGame) return;
-
     setIsStartingGame(true);
 
     router.post(
@@ -232,71 +385,27 @@ useEffect(() => {
       {},
       {
         preserveState: true,
-        headers: {
-          'X-Socket-Id': (echo)?.socketId?.() ?? '',
-        },
-        onError: () => {
-          setIsStartingGame(false);
-        },
-        onFinish: () => {
-          // safety to clear spinner even if server didn't broadcast
-          setTimeout(() => setIsStartingGame(false), 2500);
-        },
-      }
+        headers: { 'X-Socket-Id': (echo as any)?.socketId?.() ?? '' },
+        onError: () => setIsStartingGame(false),
+        onFinish: () => setTimeout(() => setIsStartingGame(false), 2500),
+      },
     );
   }, [isStartingGame, room.id]);
 
-  // ----- Play card -----
-const playCard = useCallback(
-  async (card: string) => {
-    if (!isMyTurn || !isValidPlay(card, topCard)) return;
-    try {
-      await playCardApi(room.id, card);
-
-      // Optimistic updates:
-      setHand(prev => prev.filter(c => c !== card));
-      setTopCard(card);
-      
-      // Add these two lines:
-      setHandCounts(prev => ({ ...prev, [uid]: (prev[uid] ?? hand.length) - 1 }));
-      setDeckCount(prev => prev - 1);
-
-    } catch (err) {
-      console.error(err);
-    }
-  },
-  [isMyTurn, topCard, room.id, uid, hand.length]
-);
-
-
-  // ----- Pickup card -----
-const pickupCard = useCallback(async () => {
-  if (!isMyTurn) return;
-
-  try {
-    await pickupCardApi(room.id);
-    // No UI update here — the server event will push the updated hand & deck
-  } catch (err) {
-    console.error('Failed to pick up card:', err);
-  }
-}, [isMyTurn, room.id]);
-
-  // ----- Leave game -----
   const leaveGame = useCallback(() => {
-    router.delete(`/leaveroom/${room.id}`, {
-      preserveState: true,
-      headers: {
-        'X-Socket-Id': (echo)?.socketId?.() ?? '',
-      },
-    });
-  }, [room.id]);
+    router.visit('/rooms');
+  }, []);
 
+  // ----- Derived -----
+  const { hand, topCard, deckCount, handCounts, currentTurn } = game;
+
+  // ----- Render (your original layout) -----
   return (
     <AppLayout>
       <div className="w-full h-screen flex flex-col items-center justify-between p-6 bg-green-700">
         {/* Other players */}
         <OtherPlayers
-          players={(connectedPlayers ?? []).filter(p => p?.id !== userId)}
+          players={(connectedPlayers ?? []).filter((p) => p?.id !== userId)}
           handCounts={handCounts}
           currentTurn={currentTurn}
           userId={userId}
@@ -317,7 +426,7 @@ const pickupCard = useCallback(async () => {
           isStartingGame={isStartingGame}
           connectedPlayers={connectedPlayers ?? []}
           isChatOpen={isChatOpen}
-          toggleChat={() => setIsChatOpen(open => !open)}
+          toggleChat={() => setIsChatOpen((open) => !open)}
           leaveGame={leaveGame}
           startGame={startGame}
         />
