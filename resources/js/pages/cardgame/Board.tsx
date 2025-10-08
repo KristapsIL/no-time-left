@@ -190,21 +190,24 @@ export default function Board() {
   };
 
   const onHandSynced = (raw: unknown) => {
-    const data = raw as HandSyncedPayload;
-    if (data.userId !== userId) return;
+    const d = raw as any;
+    const id = d.userId ?? d.user_id;
+    if (id !== userId) return;
 
     startTransition(() => {
       dispatch({
         type: 'SERVER_SYNC',
         payload: {
-          hand: data.hand ?? gameRef.current.hand,
-          handCounts: data.hand_counts ?? gameRef.current.handCounts,
-          deckCount: typeof data.deck_count === 'number' ? data.deck_count : gameRef.current.deckCount,
-          topCard: (data.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
+          hand: Array.isArray(d.hand) ? d.hand : gameRef.current.hand,
+          handCounts: d.hand_counts ?? gameRef.current.handCounts,
+          deckCount: typeof d.deck_count === 'number' ? d.deck_count : gameRef.current.deckCount,
+          topCard: (d.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
         },
       });
+      const turn = d.turnPlayerId ?? d.turn_player_id;
+      if (typeof turn === 'number') dispatch({ type: 'SET_TURN', turn });
     });
-  };
+  }
 
   // ----- Echo subscribe -----
   useEffect(() => {
@@ -398,6 +401,29 @@ const pickupCard = useCallback(async () => {
 
   // ----- Derived -----
   const { hand, topCard, deckCount, handCounts, currentTurn } = game;
+   
+
+const canPlayCard = useCallback(
+  (card: string) => isMyTurn && isValidPlay(card, gameRef.current.topCard),
+  [isMyTurn]
+);
+
+// Guarded play: ignore clicks when not my turn or invalid
+const onPlay = useCallback(
+  (card: string) => {
+    if (!canPlayCard(card)) return;
+    // call your existing playCard (which still double-checks)
+    playCard(card);
+  },
+  [canPlayCard, playCard]
+);
+
+// Guarded pickup: ignore clicks when not my turn
+const onPickup = useCallback(() => {
+  if (!isMyTurn) return;
+  pickupCard();
+}, [isMyTurn, pickupCard]);
+
 
   // ----- Render (your original layout) -----
   return (
@@ -413,12 +439,12 @@ const pickupCard = useCallback(async () => {
 
         {/* Center table: deck + top card */}
         <div className="flex gap-12 items-center justify-center flex-wrap">
-          <Deck deckCount={deckCount} isMyTurn={isMyTurn} pickupCard={pickupCard} />
+          <Deck deckCount={deckCount} isMyTurn={isMyTurn} pickupCard={onPickup} />
           <TopCard topCard={topCard} />
         </div>
 
         {/* Player hand */}
-        <PlayerHand hand={hand} topCard={topCard} isMyTurn={isMyTurn} playCard={playCard} />
+        <PlayerHand hand={hand} topCard={topCard} isMyTurn={isMyTurn} playCard={onPlay} />
 
         {/* Game controls */}
         <GameControls
