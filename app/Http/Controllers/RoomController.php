@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Room;
 use App\Models\RoomRules;
-use App\Models\CardGame;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Str;
@@ -81,16 +80,5 @@ class RoomController extends Controller
     {
         $request->user()->rooms()->detach($roomId);
         return redirect()->route('findRoom');
-    }
-    public function resyncHand(Request $request, CardGame $room)
-    {
-        $userId = $request->user()->id;
-
-        broadcast(new HandSynced(
-            userId: $userId,
-            hand: $room->player_hands[$userId] ?? []
-        ));
-
-        return response()->noContent();
     }
 }
