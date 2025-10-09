@@ -101,24 +101,23 @@ class CardGameController extends Controller
     }
 
 
-    public function reset(int $roomId): RedirectResponse
+    public function reset(Request $request, int $roomId): \Illuminate\Http\JsonResponse
     {
-        $room = Room::with('game')->findOrFail($roomId);
-        $game = $room->game;
+        DB::transaction(function () use ($roomId) {
+            $game = \App\Models\CardGame::where('room_id', $roomId)->lockForUpdate()->firstOrFail();
 
-        if (!$game) {
-            return back()->with('error', 'Game not initialized for this room.');
-        }
+            $game->player_hands = [];
+            $game->used_cards   = [];
+            $game->deck         = [];      // let your start game build a fresh deck
+            $game->current_turn = null;
+            $game->winner_id    = null;
+            $game->game_status  = 'waiting';
+            $game->save();
 
-        $game->deck = $this->buildDeck();
-        $game->used_cards = [];
-        $game->player_hands = [];
-        $game->current_turn = null;
-        $game->game_status = 'waiting';
-        $game->game_started_at = null;
-        $game->save();
+            broadcast(new \App\Events\GameReset($roomId)); // to all
+        });
 
-        return back();
+        return response()->json(['ok' => true], 200);
     }
 
     private function buildDeck(): array
@@ -318,7 +317,7 @@ public function playCard(Request $request, int $roomId)
         $game->current_turn = $finished ? null : $nextTurn;
         $game->game_status  = $finished ? 'finished' : 'in_progress';
         if ($finished) {
-            $game->winner_id = $winnerId;
+            $game->winner = $winnerId;
         }
         $game->save();
 
@@ -526,15 +525,12 @@ public function playCard(Request $request, int $roomId)
         foreach ($hands as $pid => $h) {
             $handCounts[$pid] = is_array($h) ? count($h) : 0;
         }
-
-        // Mark finished & freeze turn
-        $game->game_status  = 'finished';
-        $game->winner_id    = $winnerId;
-        $game->current_turn = null;
-        $game->save();
-
-        // Tell everyone the game ended
-        broadcast(new GameFinished($game->room_id, $winnerId, $handCounts))->toOthers();
-    }
+        
+        broadcast(new \App\Events\GameFinished(
+            roomId: $game->room_id,
+            winnerId: $winnerId,
+            handCounts: $handCounts
+        ));
+}
 
 }

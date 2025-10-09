@@ -102,6 +102,8 @@ type GameState = {
   topCard: string | null;
   handCounts: Record<string, number>;
   currentTurn: number | null;
+  status?: 'waiting' | 'in_progress' | 'finished';
+  winnerId?: number | null;
 };
 
 type Action =
@@ -209,6 +211,35 @@ export default function Board() {
     });
   }
 
+  const onGameFinished = (raw: unknown) => {
+    const d = raw as { winner_id: number; hand_counts?: Record<string, number> };
+    dispatch({
+      type: 'SERVER_SYNC',
+      payload: {
+        status: 'finished',
+        winnerId: d.winner_id,
+        handCounts: d.hand_counts ?? gameRef.current.handCounts,
+      },
+    });
+    dispatch({ type: 'SET_TURN', turn: null }); // freeze turns
+  };
+
+  // .game-reset
+  const onGameReset = (_raw: unknown) => {
+    dispatch({
+      type: 'SERVER_SYNC',
+      payload: {
+        status: 'waiting',
+        winnerId: null,
+        topCard: null,
+        deckCount: 0,
+        hand: [],
+        handCounts: {},
+        currentTurn: null,
+      },
+    });
+  };
+
   // ----- Echo subscribe -----
   useEffect(() => {
     if (!echo) return;
@@ -236,12 +267,15 @@ export default function Board() {
     channel.listen('.game-started', onGameStarted);
     channel.listen('.card-played', onCardPlayed);
     channel.listen('.hand-synced', onHandSynced);
-
+    channel.listen('.game-finished', onGameFinished);
+    channel.listen('.game-reset', onGameReset);
     return () => {
       try {
         channel.stopListening('.game-started');
         channel.stopListening('.card-played');
         channel.stopListening('.hand-synced');
+        channel.stopListening('.game-finished');
+        channel.stopListening('.game-reset');
         (echo as any).leave?.(`room-${room.id}`);
       } catch (err) {
         console.log(err);
@@ -424,6 +458,22 @@ const onPickup = useCallback(() => {
   pickupCard();
 }, [isMyTurn, pickupCard]);
 
+const playAgain = useCallback(async () => {
+  try {
+    await fetch(`/board/${room.id}/reset`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '',
+        'X-Socket-Id': (echo as any)?.socketId?.() ?? '',
+      },
+    });
+    // .game-reset will arrive; reducer will update to 'waiting'
+  } catch (e) {
+    console.error('reset failed', e);
+  }
+}, [room.id]);
 
   // ----- Render (your original layout) -----
   return (
@@ -460,6 +510,36 @@ const onPickup = useCallback(() => {
         {/* Chat panel */}
         <RoomChat roomId={room.id} isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
       </div>
+      {game.status === 'finished' && (
+      <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
+        <div className="bg-white rounded-lg p-6 w-full max-w-md text-center space-y-4 shadow-xl">
+          <h2 className="text-2xl font-bold">
+            {game.winnerId === userId ? 'You win! 🎉' : 'Game over'}
+          </h2>
+
+          {game.winnerId !== userId && game.winnerId != null && (
+            <p className="text-gray-700">Winner: Player {game.winnerId}</p>
+          )}
+
+          <div className="flex gap-3 justify-center">
+            <button
+              className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700"
+              onClick={playAgain}
+            >
+              Play again
+            </button>
+            <button
+              className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
+              onClick={() => router.visit('/rooms')}
+            >
+              Leave
+            </button>
+          </div>
+
+          <p className="text-sm text-gray-500">“Play again” resets to Waiting so you can press Start.</p>
+        </div>
+      </div>
+    )}
     </AppLayout>
   );
 }
