@@ -110,7 +110,7 @@ class CardGameController extends Controller
             $game->used_cards   = [];
             $game->deck         = [];      // let your start game build a fresh deck
             $game->current_turn = null;
-            $game->winner_id    = null;
+            $game->winner    = null;
             $game->game_status  = 'waiting';
             $game->save();
 
@@ -353,7 +353,7 @@ public function playCard(Request $request, int $roomId)
             roomId: $roomIdOut,
             winnerId: $winnerId,
             handCounts: $handCounts
-        ))->toOthers();
+        ));
 
         return response()->json([
             'finished'  => true,
@@ -515,22 +515,4 @@ public function playCard(Request $request, int $roomId)
             'game_status'  => $game->game_status,
         ]);
     }
-
-    private function finishGame(CardGame $game, int $winnerId): void
-    {
-        $hands = $game->player_hands ?? [];
-
-        // Build hand counts for UI
-        $handCounts = [];
-        foreach ($hands as $pid => $h) {
-            $handCounts[$pid] = is_array($h) ? count($h) : 0;
-        }
-        
-        broadcast(new \App\Events\GameFinished(
-            roomId: $game->room_id,
-            winnerId: $winnerId,
-            handCounts: $handCounts
-        ));
-}
-
 }

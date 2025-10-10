@@ -25,4 +25,3 @@ class GameReset implements ShouldBroadcast
         return [];
     }
 }
-}

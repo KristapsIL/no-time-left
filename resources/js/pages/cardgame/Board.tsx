@@ -20,7 +20,7 @@ import { GameControls } from '@/components/Board/GameControls';
 
 import echo from '@/lib/echo';
 import { isValidPlay } from '@/utils/gameLogic';
-import { playCardApi, pickupCardApi, resyncStateApi } from '@/utils/api';
+import { playCardApi, pickupCardApi, resyncStateApi, resetGameApi} from '@/utils/api';
 
 // ---------- Types ----------
 type Player = { id: number; name?: string };
@@ -212,17 +212,21 @@ export default function Board() {
   }
 
   const onGameFinished = (raw: unknown) => {
-    const d = raw as { winner_id: number; hand_counts?: Record<string, number> };
+    const d = raw as any;
+    const winner = d.winner_id ?? d.winnerId;
+    console.log('Game finished payload:', d);
+
     dispatch({
       type: 'SERVER_SYNC',
       payload: {
         status: 'finished',
-        winnerId: d.winner_id,
-        handCounts: d.hand_counts ?? gameRef.current.handCounts,
+        winnerId: winner ?? null,
+        handCounts: d.hand_counts ?? d.handCounts ?? gameRef.current.handCounts,
       },
     });
-    dispatch({ type: 'SET_TURN', turn: null }); // freeze turns
+    dispatch({ type: 'SET_TURN', turn: null });
   };
+
 
   // .game-reset
   const onGameReset = (_raw: unknown) => {
@@ -430,7 +434,8 @@ const pickupCard = useCallback(async () => {
   }, [isStartingGame, room.id]);
 
   const leaveGame = useCallback(() => {
-    router.visit('/rooms');
+    console.log('Leaving...');
+    router.visit('/findRoom');
   }, []);
 
   // ----- Derived -----
@@ -460,20 +465,13 @@ const onPickup = useCallback(() => {
 
 const playAgain = useCallback(async () => {
   try {
-    await fetch(`/board/${room.id}/reset`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '',
-        'X-Socket-Id': (echo as any)?.socketId?.() ?? '',
-      },
-    });
-    // .game-reset will arrive; reducer will update to 'waiting'
+    await resetGameApi(room.id);
+    // game-reset event will arrive; reducer will update state automatically
   } catch (e) {
     console.error('reset failed', e);
   }
 }, [room.id]);
+
 
   // ----- Render (your original layout) -----
   return (
@@ -512,7 +510,7 @@ const playAgain = useCallback(async () => {
       </div>
       {game.status === 'finished' && (
       <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
-        <div className="bg-white rounded-lg p-6 w-full max-w-md text-center space-y-4 shadow-xl">
+        <div className="bg-black rounded-lg p-6 w-full max-w-md text-center space-y-4 shadow-xl">
           <h2 className="text-2xl font-bold">
             {game.winnerId === userId ? 'You win! 🎉' : 'Game over'}
           </h2>
@@ -529,8 +527,8 @@ const playAgain = useCallback(async () => {
               Play again
             </button>
             <button
-              className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
-              onClick={() => router.visit('/rooms')}
+              className="px-4 py-2 rounded bg-red-500 hover:bg-gray-300"
+              onClick={leaveGame}
             >
               Leave
             </button>

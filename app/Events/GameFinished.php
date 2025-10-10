@@ -2,7 +2,9 @@
 
 namespace App\Events;
 
-use Illuminate\Broadcasting\Channel;
+namespace App\Events;
+
+use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 
 class GameFinished implements ShouldBroadcast
@@ -13,8 +15,8 @@ class GameFinished implements ShouldBroadcast
         public array $handCounts = []
     ) {}
 
-    public function broadcastOn(): Channel {
-        return new Channel("room-{$this->roomId}");
+    public function broadcastOn(): PresenceChannel {
+        return new PresenceChannel("room-{$this->roomId}");
     }
 
     public function broadcastAs(): string {

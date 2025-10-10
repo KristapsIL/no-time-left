@@ -84,3 +84,20 @@ export const resyncStateApi = async (roomId: number) => {
   if (!res.ok) throw buildError(res, body);
   return body ?? {};
 };
+
+export const resetGameApi = async (roomId: number) => {
+  const res = await fetch(`/board/${roomId}/reset`, {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-CSRF-TOKEN': getCsrf(),
+      'X-Socket-Id': (echo as any)?.socketId?.() ?? '',
+    },
+  });
+
+  const body = await parseJsonSafe(res);
+  if (!res.ok) throw buildError(res, body);
+  return body ?? {};
+};
+
