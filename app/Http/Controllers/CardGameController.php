@@ -122,13 +122,13 @@ class CardGameController extends Controller
 
     private function buildDeck(): array
     {
-        $suits = ['♠', '♥', '♦', '♣'];
+        $suits = ['S', 'H', 'D', 'C'];
         $faces = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
         $deck  = [];
 
         foreach ($suits as $suit) {
             foreach ($faces as $face) {
-                $deck[] = $face . '-' . $suit;
+                $deck[] = $face . '' . $suit;
             }
         }
 
@@ -333,7 +333,6 @@ public function playCard(Request $request, int $roomId)
         ];
     });
 
-    // ✅ Send the actor a full sync on the room presence channel (NO ->toOthers())
     broadcast(new \App\Events\HandSynced(
         roomId:       $roomIdOut,
         userId:       $userId,
@@ -444,7 +443,6 @@ public function playCard(Request $request, int $roomId)
                 : null;
 
             do {
-
                 $this->checkDeckAndReshuffle($deck, $game);
 
                 if (count($deck) === 0) {
