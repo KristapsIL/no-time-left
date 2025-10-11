@@ -1,19 +1,16 @@
 import React from 'react';
+import { CardView } from '@/components/Board/CardView';
 
-type Props = {
-  topCard: string | null;
+export const TopCard: React.FC<{ topCard: string | null }> = ({ topCard }) => {
+  return (
+    <div className="flex items-center justify-center">
+      {topCard ? (
+        <CardView card={topCard} disabled className="w-16 h-24" />
+      ) : (
+        <div className="w-16 h-24 rounded-lg border border-dashed border-gray-400 flex items-center justify-center text-xs text-gray-500">
+          No card
+        </div>
+      )}
+    </div>
+  );
 };
-
-export const TopCard = ({ topCard }: Props) => (
-  <div className="relative w-20 h-28">
-    {topCard ? (
-      <div className="absolute w-full h-full rounded-lg bg-white border shadow-lg flex items-center justify-center text-xl text-black font-bold">
-        {topCard}
-      </div>
-    ) : (
-      <div className="absolute w-full h-full rounded-lg bg-neutral-800 border shadow-md flex items-center justify-center text-black text-2xl">
-        🂠
-      </div>
-    )}
-  </div>
-);

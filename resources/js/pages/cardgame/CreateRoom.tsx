@@ -66,21 +66,14 @@ function CreateRoom() {
                 <div>
                     <label className="block mb-2">Rules</label>
                     <div>
-                        <label className="flex gap-2">
-                            <input
-                                type="checkbox"
-                                checked={rules.includes("two_plus_two")}
-                                onChange={() => handleRuleChange("two_plus_two")} />
-                            2 adds +2 cards
-                        </label>
 
                         <label className="flex gap-2">
                             <input
                                 type="checkbox"
-                                checked={rules.includes("queen_time_loss")}
-                                onChange={() => handleRuleChange("queen_time_loss")}
+                                checked={rules.includes("pick_up_till_mach")}
+                                onChange={() => handleRuleChange("pick_up_till_mach")}
                             />
-                            Queen takes away time
+                            Pick up cards till match
                         </label>
                     </div>
                 </div>

@@ -20,6 +20,7 @@ return new class extends Migration
             $table->foreignId('current_turn')->nullable()->constrained('users');
             $table->enum('game_status', ['waiting', 'starting', 'in_progress', 'finished'])->default('waiting');
             $table->timestamp('game_started_at')->nullable();
+            $table->foreignId('winner')->nullable()->constrained('users');
             $table->timestamps();
         });
     }

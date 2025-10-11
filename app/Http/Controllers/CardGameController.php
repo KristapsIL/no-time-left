@@ -16,12 +16,11 @@ use App\Models\CardGame;
 use App\Events\GameStarted;
 use App\Events\CardPlayed;
 use App\Events\HandSynced;
+use App\Events\GameFinished;
+use App\Events\GameReset;
 
 class CardGameController extends Controller
 {
-
-
-
     public function board(Request $request, int $roomId)
     {
         $user = $request->user();
@@ -102,24 +101,23 @@ class CardGameController extends Controller
     }
 
 
-    public function reset(int $roomId): RedirectResponse
+    public function reset(Request $request, int $roomId): \Illuminate\Http\JsonResponse
     {
-        $room = Room::with('game')->findOrFail($roomId);
-        $game = $room->game;
+        DB::transaction(function () use ($roomId) {
+            $game = \App\Models\CardGame::where('room_id', $roomId)->lockForUpdate()->firstOrFail();
 
-        if (!$game) {
-            return back()->with('error', 'Game not initialized for this room.');
-        }
+            $game->player_hands = [];
+            $game->used_cards   = [];
+            $game->deck         = [];      // let your start game build a fresh deck
+            $game->current_turn = null;
+            $game->winner    = null;
+            $game->game_status  = 'waiting';
+            $game->save();
 
-        $game->deck = $this->buildDeck();
-        $game->used_cards = [];
-        $game->player_hands = [];
-        $game->current_turn = null;
-        $game->game_status = 'waiting';
-        $game->game_started_at = null;
-        $game->save();
+            broadcast(new \App\Events\GameReset($roomId)); // to all
+        });
 
-        return back();
+        return response()->json(['ok' => true], 200);
     }
 
     private function buildDeck(): array
@@ -176,70 +174,66 @@ class CardGameController extends Controller
         ])->save();
     }
 
-    public function startGame(Request $request, int $roomId){
+    
+    public function startGame(Request $request, int $roomId)
+    {
         $userId = $request->user()->id;
 
         [$game, $hands, $deck, $usedCards, $players] = DB::transaction(function () use ($roomId, $userId) {
             $room = Room::with(['players', 'game', 'rules'])->lockForUpdate()->findOrFail($roomId);
 
-            // Validācija
+            // Validations
             $this->validateStartConditions($room, $userId);
 
-            // Spēles instance
             $game = $room->game ?? new CardGame(['room_id' => $room->id]);
-
-            // Kavas sagatavošana
-            $deck = $game->deck ?: $this->buildDeck();
+            $deck =  $this->buildDeck();
             shuffle($deck);
 
             $cardsPerPlayer = $room->rules->cards_per_player ?? 6;
-
-            // Spēlētāju kāršu sadale
             $players = $room->players()->orderBy('room_user.created_at')->get();
+
             $hands = $this->dealCards($deck, $players, $cardsPerPlayer);
 
-            // Pirmā kārts uz galda
-            $firstCard = array_shift($deck);
-            $usedCards = [$firstCard];
+            $firstCard  = array_shift($deck);
+            $usedCards  = [$firstCard];
 
-            // Spēles inicializācija
-            $this->initializeGame($game, $hands, $deck, $usedCards, $players->first()->id);
+            // First player starts
+            $firstTurnId = $players->first()->id;
+            $this->initializeGame($game, $hands, $deck, $usedCards, $firstTurnId);
 
             return [$game, $hands, $deck, $usedCards, $players];
         });
 
-        // Rokas izmēri
         $handCounts = collect($hands)->map(fn($h) => count($h))->toArray();
-        $deckCount = count($deck);
+        $deckCount  = count($deck);
+        $turnId     = $game->current_turn;
 
-        // Broadcast: spēle sākta
+        // Broadcast the start to everyone (shared fields)
         broadcast(new GameStarted(
             roomId:       $game->room_id,
             handCounts:   $handCounts,
             usedCards:    $usedCards,
-            turnPlayerId: $game->current_turn,
+            turnPlayerId: $turnId,
             deckCount:    $deckCount
         ));
 
-        // Broadcast: katram spēlētājam viņa roka
+        // Each player receives their hand on the room channel (so their own tab updates fully)
         foreach ($players as $p) {
+            $pid = (int) $p->id;
             broadcast(new HandSynced(
-                userId: $p->id,
-                hand:   $hands[(string)$p->id]
+                roomId:       $game->room_id,
+                userId:       $pid,
+                hand:         $hands[(string)$pid] ?? [],
+                handCounts:   $handCounts,
+                deckCount:    $deckCount,
+                usedCards:    $usedCards,
+                turnPlayerId: $turnId,
             ));
+            // NOTE: no ->toOthers() here — the drawer must also receive it
         }
-        return response()->json([
-            'success'      => true,
-            'hand'         => $actingHand ?? null,
-            'hand_counts'  => $handCounts ?? [],
-            'deck_count'   => $deckCount ?? 0,
-            'used_cards'   => $usedCards ?? [],
-            'current_turn' => $turnPlayerId ?? null,
-            'game_status'  => $game->game_status ?? null,
-        ]);
+
+        return response()->json(['success' => true]);
     }
-
-
 
     public function updateDeckState(CardGame $game, array $deck, array $usedCards): void
     {
@@ -249,114 +243,136 @@ class CardGameController extends Controller
         ]);
     }
 
+public function playCard(Request $request, int $roomId)
+{
+    $request->validate([
+        'card' => ['required', 'string', 'regex:/^(?:[2-9]|10|[JQKA])-[\x{2660}\x{2665}\x{2666}\x{2663}]$/u'],
+    ]);
 
-    public function playCard(Request $request, int $roomId){
-        $request->validate([
-            'card' => ['required', 'string', 'regex:/^(?:[2-9]|10|[JQKA])-[\x{2660}\x{2665}\x{2666}\x{2663}]$/u'],
-        ]);
+    $userId = (int) $request->user()->id;
+    $card   = (string) $request->input('card');
 
-        $userId = $request->user()->id;
-        $card   = (string) $request->input('card');
+    [
+        $roomIdOut,
+        $hand,
+        $usedCards,
+        $handCounts,
+        $deckCount,
+        $nextTurn,
+        $finished,
+        $winnerId
+    ] = DB::transaction(function () use ($roomId, $userId, $card) {
+        $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
+        $game = $room->game;
 
-        [$game, $actingHand, $usedCards, $handCounts, $deckCount, $turnPlayerId, $gameStatus] =
-            DB::transaction(function () use ($roomId, $userId, $card) {
-                $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
-                $game = $room->game;
+        if (!$game || $userId !== (int) $game->current_turn) {
+            abort(422, 'Not your turn or game not initialized.');
+        }
 
-                if (!$game) {
-                    abort(422, 'Game not initialized.');
-                }
+        $hands = $game->player_hands ?? [];
+        $playerKey = (string) $userId;
+        $hand = $hands[$playerKey] ?? [];
 
-                if ($userId !== $game->current_turn) {
-                    abort(422, 'Not your turn.');
-                }
+        // Validate the player has the card (exactly one instance)
+        $idx = array_search($card, $hand, true);
+        if ($idx === false) {
+            abort(422, 'Card not in hand');
+        }
 
-                $hands = $game->player_hands ?? [];
-                $hand  = $hands[(string)$userId] ?? [];
+        // Validate play against current top card (if any)
+        $usedArr = $game->used_cards ?? [];
+        $topCard = !empty($usedArr) ? end($usedArr) : null;
+        if ($topCard && !$this->isValidPlay($card, $topCard)) {
+            abort(422, 'Invalid play');
+        }
 
-                if (!in_array($card, $hand, true)) {
-                    abort(422, 'You do not have that card in your hand.');
-                }
+        // Remove exactly one instance of the card
+        array_splice($hand, $idx, 1);
+        $hands[$playerKey] = $hand;
 
-                $usedCards = $game->used_cards ?? [];
-                $topCard   = !empty($usedCards) ? $usedCards[array_key_last($usedCards)] : null;
+        // Add to used pile (top will be this card)
+        $usedArr[] = $card;
 
-                if ($topCard && !$this->isValidPlay($card, $topCard)) {
-                    abort(422, 'Invalid play - card does not match suit or value.');
-                }
+        // Determine if finished, and next turn if not finished
+        $finished = count($hand) === 0;
+        $winnerId = $finished ? $userId : null;
 
-                // Izņem kārti no rokas
-                $idx = array_search($card, $hand, true);
-                unset($hand[$idx]);
-                $hands[(string)$userId] = array_values($hand);
+        $nextTurn = null;
+        if (!$finished) {
+            $playerIds = $room->players()
+                ->orderBy('room_user.created_at')
+                ->pluck('users.id')
+                ->toArray();
 
-                // Pievieno kārti pie izmantotajām
-                $usedCards[] = $card;
-                $usedCards = array_values($usedCards);
+            $currentIndex = array_search($game->current_turn, $playerIds, true);
+            $nextTurn = $playerIds[($currentIndex + 1) % max(count($playerIds), 1)] ?? null;
+        }
 
-                // Aprēķina nākamo gājienu
-                $players = $room->players()
-                    ->orderBy('room_user.created_at', 'asc')
-                    ->pluck('users.id')
-                    ->toArray();
+        // Persist game state
+        $game->player_hands = $hands;
+        $game->used_cards   = array_values($usedArr);
+        $game->current_turn = $finished ? null : $nextTurn;
+        $game->game_status  = $finished ? 'finished' : 'in_progress';
+        if ($finished) {
+            $game->winner = $winnerId;
+        }
+        $game->save();
 
-                $currentIndex = array_search($game->current_turn, $players, true);
-                $nextIndex = ($currentIndex !== false && count($players) > 0)
-                    ? (($currentIndex + 1) % count($players))
-                    : 0;
+        $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
+        $deckCount  = count($game->deck ?? []);
 
-                $nextTurn = $players[$nextIndex] ?? $game->current_turn;
+        return [
+            $game->room_id,
+            $hand,
+            $game->used_cards,
+            $handCounts,
+            $deckCount,
+            $nextTurn,
+            $finished,
+            $winnerId,
+        ];
+    });
 
-                // Atjauno spēles stāvokli
-                $game->player_hands = $hands;
-                $game->used_cards   = $usedCards;
-                $game->game_status  = (count($hand) === 0) ? 'finished' : 'in_progress';
-                $game->current_turn = $game->game_status === 'finished' ? null : $nextTurn;
-                $game->save();
+    broadcast(new \App\Events\HandSynced(
+        roomId:       $roomIdOut,
+        userId:       $userId,
+        hand:         $hand,
+        handCounts:   $handCounts,
+        deckCount:    $deckCount,
+        usedCards:    $usedCards,
+        turnPlayerId: $finished ? null : $nextTurn,
+    ));
 
-                $handCounts = collect($hands)->map(fn($h) => count($h))->toArray();
-                $deckCount = count($game->deck);
-
-                return [
-                    $game,
-                    $hand,
-                    $usedCards,
-                    $handCounts,
-                    $deckCount,
-                    $game->current_turn,
-                    $game->game_status,
-                ];
-            });
-
-        broadcast(new CardPlayed(
-            roomId:       $game->room_id,
-            userId:       $userId,
-            card:         $card,
-            usedCards:    $usedCards,
-            handCounts:   $handCounts,
-            turnPlayerId: $turnPlayerId,
-            deckCount:    $deckCount
-        ));
-
-        broadcast(new HandSynced(
-            userId: $userId,
-            hand:   $actingHand
+    if ($finished) {
+        // Notify others the game finished
+        broadcast(new \App\Events\GameFinished(
+            roomId: $roomIdOut,
+            winnerId: $winnerId,
+            handCounts: $handCounts
         ));
 
         return response()->json([
-            'success'      => true,
-            'hand'         => $actingHand ?? null,
-            'hand_counts'  => $handCounts ?? [],
-            'deck_count'   => $deckCount ?? 0,
-            'used_cards'   => $usedCards ?? [],
-            'current_turn' => $turnPlayerId ?? null,
-            'game_status'  => $game->game_status ?? null,
-        ]);
+            'finished'  => true,
+            'winner_id' => $winnerId,
+        ], 200);
     }
+
+    // Notify others about the shared changes
+    broadcast(new \App\Events\CardPlayed(
+        roomId: $roomIdOut,
+        userId: $userId,
+        card: $card,
+        handCounts: $handCounts,
+        deckCount: $deckCount,
+        turnPlayerId: $nextTurn,
+        usedCards: $usedCards
+    ))->toOthers();
+
+    return response()->json(['success' => true], 200);
+}
 
     protected function isValidPlay(string $card, string $topCard): bool
     {
-        // Correctly parse "VALUE-SUIT" format (e.g., "10-♣")
         [$cValue, $cSuit]   = $this->splitCard($card);
         [$tValue, $tSuit]   = $this->splitCard($topCard);
 
@@ -371,68 +387,117 @@ class CardGameController extends Controller
         $suit  = $parts[1] ?? '';
         return [$value, $suit];
     }
+    private function checkDeckAndReshuffle(array &$deck, \App\Models\CardGame $game): void
+    {
+        $used = $game->used_cards ?? [];
+
+        if (count($deck) === 0) {
+            $top = null;
+            if (!empty($used)) {
+                $top = array_pop($used); // keep visible top
+            }
+
+            if (!empty($used)) {
+                shuffle($used);
+                $deck = array_values($used); // updates caller's $deck
+            } else {
+                $deck = [];
+            }
+
+            $game->used_cards = $top ? [$top] : [];
+            $game->deck       = $deck;
+            $game->save();
+        }
+    }
 
     public function pickUpCard(Request $request, int $roomId)
     {
-        $userId = $request->user()->id;
+        $userId = (int) $request->user()->id;
 
-        [$game, $userHand, $handCounts, $deckCount, $turnPlayerId] =
-            DB::transaction(function () use ($roomId, $userId) {
-                $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
-                $game = $room->game;
+        [$game, $hand, $handCounts, $deckCount, $drawnCard] = DB::transaction(function () use ($roomId, $userId) {
+            $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
+            $game = $room->game;
 
-                if (!$game) {
-                    abort(422, 'Game not initialized.');
+            if (!$game || $userId !== (int) $game->current_turn) {
+                abort(422, 'Not your turn or game not initialized.');
+            }
+
+            $hands = $game->player_hands ?? [];
+            $deck  = $game->deck ?? [];
+            $this->checkDeckAndReshuffle($deck, $game);
+
+
+            if (count($deck) === 0) {
+                $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
+                return [$game, $hands[(string)$userId] ?? [], $handCounts, 0, null];
+            }
+
+            $matchRule = RoomRules::where('room_id', $roomId)
+                ->where('rules->pick_up_till_match', true);
+
+            $pickedup = 0;
+
+            $usedCards = $game->used_cards ?? [];
+            $topCard = !empty($usedCards)
+                ? $usedCards[array_key_last($usedCards)]
+                : null;
+
+            do {
+                $this->checkDeckAndReshuffle($deck, $game);
+
+                if (count($deck) === 0) {
+                    break;
                 }
-
-                if ($userId !== $game->current_turn) {
-                    abort(422, 'Not your turn.');
-                }
-
-                $hands = $game->player_hands ?? [];
-                $deck  = $game->deck ?? [];
-
-                if (empty($deck)) {
-                    abort(422, 'No more cards in deck.');
-                }
-
                 $drawn = array_shift($deck);
-                $hands[(string)$userId][] = $drawn;
+
+
+                $playerKey   = (string) $userId;
+                $playerHand  = $hands[$playerKey] ?? [];
+                $playerHand[] = $drawn;
+                $hands[$playerKey] = $playerHand;
 
                 $game->player_hands = $hands;
-                $this->updateDeckState($game, $deck, $game->used_cards ?? []);
+                $game->deck = $deck;
                 $game->save();
 
-                $handCounts = collect($hands)->map(fn($h) => count($h))->toArray();
-                $deckCount  = count($deck);
+                $pickedup++;
 
-                return [$game, $hands[(string)$userId], $handCounts, $deckCount, $game->current_turn];
-            });
+            } while (!$this->isValidPlay($drawn, $topCard) && $matchRule);
 
-        broadcast(new HandSynced(
-            userId: $userId,
-            hand:   $userHand
-        ));
+            $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
 
-        broadcast(new CardPlayed(
+            return [$game, $playerHand, $handCounts, count($deck), $drawn];
+
+        });
+
+        broadcast(new \App\Events\HandSynced(
             roomId:       $game->room_id,
             userId:       $userId,
-            card:         '', // empty since it's a pickup
-            usedCards:    $game->used_cards ?? [],
+            hand:         $hand,
             handCounts:   $handCounts,
-            turnPlayerId: $turnPlayerId,
-            deckCount:    $deckCount
+            deckCount:    $deckCount,
+            usedCards:    $game->used_cards ?? [],
+            turnPlayerId: $game->current_turn,
+        ));
+
+        // Notify others (counts + deck + top + turn); no full hand for privacy
+        broadcast(new \App\Events\CardPlayed(
+            roomId: $game->room_id,
+            userId: $userId,
+            card: '', // pickup (not a play); reusing event shape
+            handCounts: $handCounts,
+            deckCount: $deckCount,
+            turnPlayerId: $game->current_turn,
+            usedCards: $game->used_cards ?? []
         ))->toOthers();
 
         return response()->json([
-            'success'      => true,
-            'hand'         => $actingHand ?? null,
-            'hand_counts'  => $handCounts ?? [],
-            'deck_count'   => $deckCount ?? 0,
-            'used_cards'   => $usedCards ?? [],
-            'current_turn' => $turnPlayerId ?? null,
-            'game_status'  => $game->game_status ?? null,
-        ]);
+            'hand'        => $hand,
+            'hand_counts' => $handCounts,
+            'deck_count'  => $deckCount,
+            'used_cards'  => $game->used_cards ?? [],
+            'drawn_card'  => $drawnCard, // null if no card drawn
+        ], 200);
     }
 
     public function resyncState(Request $request, int $roomId)
@@ -464,7 +529,4 @@ class CardGameController extends Controller
             'game_status'  => $game->game_status,
         ]);
     }
-
-
-
 }
