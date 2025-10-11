@@ -122,13 +122,13 @@ class CardGameController extends Controller
 
     private function buildDeck(): array
     {
-        $suits = ['S', 'H', 'D', 'C'];
+        $suits = ['♠', '♥', '♦', '♣'];
         $faces = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
         $deck  = [];
 
         foreach ($suits as $suit) {
             foreach ($faces as $face) {
-                $deck[] = $face . '' . $suit;
+                $deck[] = $face . '-' . $suit;
             }
         }
 
