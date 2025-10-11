@@ -69,14 +69,6 @@ type CardPlayedPayload = {
   turn_player_id?: number;
 };
 
-type HandSyncedPayload = {
-  userId: number;
-  hand?: string[];
-  hand_counts?: Record<string, number>;
-  deck_count?: number;
-  used_cards?: string[];
-};
-
 // ---------- Helpers ----------
 function uniqById<T extends { id?: string | number; user_id?: string | number }>(arr: T[]): T[] {
   const map = new Map<string, T>();
@@ -85,14 +77,6 @@ function uniqById<T extends { id?: string | number; user_id?: string | number }>
     if (raw !== undefined) map.set(String(raw), item);
   }
   return [...map.values()];
-}
-
-function removeOne<T>(arr: T[], predicate: (x: T) => boolean): T[] {
-  const idx = arr.findIndex(predicate);
-  if (idx === -1) return arr;
-  const next = arr.slice();
-  next.splice(idx, 1);
-  return next;
 }
 
 // ---------- Reducer ----------
@@ -227,22 +211,20 @@ export default function Board() {
     dispatch({ type: 'SET_TURN', turn: null });
   };
 
-
-  // .game-reset
-  const onGameReset = (_raw: unknown) => {
-    dispatch({
-      type: 'SERVER_SYNC',
-      payload: {
-        status: 'waiting',
-        winnerId: null,
-        topCard: null,
-        deckCount: 0,
-        hand: [],
-        handCounts: {},
-        currentTurn: null,
-      },
-    });
-  };
+const onGameReset = () => {
+  dispatch({
+    type: 'SERVER_SYNC',
+    payload: {
+      status: 'waiting',
+      winnerId: null,
+      topCard: null,
+      deckCount: 0,
+      hand: [],
+      handCounts: {},
+      currentTurn: null,
+    },
+  });
+};
 
   // ----- Echo subscribe -----
   useEffect(() => {
@@ -315,7 +297,6 @@ export default function Board() {
 
   // ----- Actions -----
   const lastSnapshotRef = useRef<GameState | null>(null);
-  const lastPickupPlaceholderRef = useRef<string | null>(null);
 
   const playCard = useCallback(
     async (card: string) => {

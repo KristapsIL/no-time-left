@@ -29,7 +29,6 @@ type Props = {
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
-/** Measure element with ResizeObserver (reacts to DevTools open/close, resizes, etc.) */
 function useElementSize<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
   const [sz, setSz] = useState({ width: 0, height: 0 });
@@ -61,12 +60,9 @@ export const PlayerHand: React.FC<Props> = React.memo(
   }) => {
     const [hovered, setHovered] = useState<number | null>(null);
 
-    // Desktop content box (we apply gutters outside, then measure inside)
     const [boxRef, boxSize] = useElementSize<HTMLDivElement>();
-    // Mobile strip measurement
     const [mobileRef, mobileSize] = useElementSize<HTMLDivElement>();
 
-    // Fallback to recompute on window resize (some environments throttle RO)
     const [, force] = useState(0);
     useEffect(() => {
       const onResize = () => force((x) => x + 1);
@@ -75,23 +71,18 @@ export const PlayerHand: React.FC<Props> = React.memo(
     }, []);
 
     const {
-      positions,        // card center positions (px)
-      needsScroll,      // whether horizontal scroll is enabled
-      scrollWidth,      // full content width for scroll container
-      containerH,       // desktop container height
-      leftCenterBound,  // clamp bounds for centers
+      positions,
+      needsScroll,
+      scrollWidth,
+      containerH,
+      leftCenterBound,
       rightCenterBound,
     } = useMemo(() => {
       const n = hand.length;
       const effW = cardSize.w;
       const effH = cardSize.h;
 
-      // Width available inside gutters
       const usableW = Math.max(0, boxSize.width);
-
-      // Compute step to fit at fixed size:
-      // Content width = effW + stepX * (n - 1).
-      // Clamp step to [minSliver, maxStep].
       const maxStep = Math.round(maxStepFrac * effW);
       let stepX = n > 1 ? Math.floor((usableW - effW) / (n - 1)) : 0;
       stepX = n > 1 ? clamp(stepX, minSliver, maxStep) : 0;
@@ -99,31 +90,23 @@ export const PlayerHand: React.FC<Props> = React.memo(
       const contentWidth = n > 0 ? effW + stepX * (n - 1) : 0;
       const needsScroll = contentWidth > usableW + 0.5;
 
-      // Build positions as **centers** so first/last never clip
       let positions: number[] = [];
       const totalSpan = stepX * Math.max(0, n - 1);
-
       let startCenter = 0;
+
       if (n > 0) {
         if (needsScroll) {
-          // Left-aligned scroll: first center at effW/2
           startCenter = effW / 2;
           positions = Array.from({ length: n }, (_, i) => startCenter + i * stepX);
         } else {
-          // Centered: centers from -span/2 .. +span/2
           startCenter = -totalSpan / 2;
           positions = Array.from({ length: n }, (_, i) => startCenter + i * stepX);
         }
       }
 
-      // Clamp bounds for centers to prevent hover-nudges from clipping
       const leftCenterBound = startCenter;
       const rightCenterBound = startCenter + totalSpan;
-
-      // Scroll container width matches full content (+1px for rounding)
       const scrollWidth = Math.ceil(contentWidth) + 1;
-
-      // Container height = card height + headroom for hover
       const containerH = Math.max(200, Math.ceil(effH + 24));
 
       return {
@@ -147,12 +130,11 @@ export const PlayerHand: React.FC<Props> = React.memo(
       [playCard]
     );
 
-    // Mobile overlap: adaptive; also never scales.
     const mobileOverlapPx = useMemo(() => {
       const n = hand.length;
       if (n <= 1) return 0;
-      const cardW = 104; // mobile size you use
-      const avail = Math.max(0, mobileSize.width - 24); // padding safety
+      const cardW = 104;
+      const avail = Math.max(0, mobileSize.width - 24);
       const minStep = Math.round(cardW * 0.35);
       const maxStep = cardW;
       const fitStep = clamp(Math.floor((avail - cardW) / Math.max(1, n - 1)), minStep, maxStep);
@@ -161,7 +143,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
 
     return (
       <div className="w-full select-none">
-        {/* DESKTOP: gutters -> measured content box -> scroll if needed */}
+        {/* Desktop */}
         <div
           className="hidden sm:block w-full"
           style={{ paddingLeft: edgeGutter, paddingRight: edgeGutter }}
@@ -171,17 +153,15 @@ export const PlayerHand: React.FC<Props> = React.memo(
             className="relative"
             style={{
               height: containerH,
-              overflowX: 'hidden', // outer measured box doesn't scroll
+              overflowX: 'hidden',
               overflowY: 'hidden',
             }}
           >
-            {/* Inner scroller when needed */}
             <div className="relative h-full overflow-x-auto overflow-y-hidden" style={{ width: '100%' }}>
               <div
                 className="relative h-full"
                 style={{ width: needsScroll ? `${scrollWidth}px` : '100%' }}
               >
-                {/* Anchor: left for scrolling, centered otherwise */}
                 <div
                   className={`absolute ${
                     needsScroll ? 'left-0' : 'left-1/2 -translate-x-1/2'
@@ -192,20 +172,17 @@ export const PlayerHand: React.FC<Props> = React.memo(
                     const canPlay = isMyTurn && isValidPlay(card, topCard);
                     const isHover = hovered === idx;
 
-                    // Hover reveal: lift & neighbor "peek" shifts
                     const z = 200 + idx + (isHover ? 1000 : 0);
                     const lift = isHover ? 18 : 0;
 
-                    // Neighbors nudge a bit away from hovered card
                     let nudge = 0;
                     if (hovered != null && hovered !== idx) {
                       const d = idx - hovered;
                       const sign = d < 0 ? -1 : 1;
-                      const mag = Math.max(0, (hoverSpread ?? 16) / (Math.abs(d) + 1)); // 16, 8, 5, ...
+                      const mag = Math.max(0, (hoverSpread ?? 16) / (Math.abs(d) + 1));
                       nudge = sign * mag;
                     }
 
-                    // Clamp nudge so center stays within safe bounds (prevents clipping)
                     const clampedCenter = clamp(x + nudge, leftCenterBound, rightCenterBound);
 
                     return (
@@ -215,7 +192,6 @@ export const PlayerHand: React.FC<Props> = React.memo(
                         style={{
                           left: 0,
                           bottom: 0,
-                          // x is the **center**; -50% ensures 1st/last never clip
                           transform: `translateX(-50%) translateX(${clampedCenter.toFixed(
                             2
                           )}px) translateY(${-lift}px)`,
@@ -238,7 +214,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
                               ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-emerald-900 cursor-pointer focus:ring-2 focus:ring-yellow-300'
                               : 'opacity-95 cursor-not-allowed',
                           ].join(' ')}
-                          style={{ width: cardSize.w, height: cardSize.h }} // fixed size, never scaled
+                          style={{ width: cardSize.w, height: cardSize.h }}
                           tabIndex={canPlay ? 0 : -1}
                           onKeyDown={(e) => onKeyPlay(e, canPlay, card)}
                           aria-disabled={!canPlay}
@@ -253,7 +229,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
           </div>
         </div>
 
-        {/* MOBILE: horizontal strip with adaptive overlap and snap */}
+        {/* Mobile */}
         <div
           ref={mobileRef}
           className="sm:hidden flex items-end overflow-x-auto px-4 pt-2 pb-[max(env(safe-area-inset-bottom),12px)] gap-1 snap-x snap-mandatory"
