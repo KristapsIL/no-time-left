@@ -1,21 +1,24 @@
 import React from 'react';
 
-type Props = {
+// Deck.tsx
+type DeckProps = {
   deckCount: number;
   isMyTurn: boolean;
   pickupCard: () => void;
 };
 
-export const Deck = ({ deckCount, isMyTurn, pickupCard }: Props) => (
-  <div className="relative w-20 h-28">
-    <div
-      className={`absolute w-full h-full rounded-lg border shadow-md flex items-center justify-center text-white text-xl cursor-pointer
-                  ${isMyTurn ? 'bg-gray-800 hover:scale-105 transition-transform' : 'bg-gray-700 cursor-not-allowed opacity-70'}`}
-      onClick={() => isMyTurn && pickupCard()}
-      title={isMyTurn ? 'Pick up a card' : 'Wait for your turn'}
+export const Deck: React.FC<DeckProps> = React.memo(({ deckCount, isMyTurn, pickupCard }) => {
+  const disabled = !isMyTurn;
+  return (
+    <button
+      onClick={() => !disabled && pickupCard()}
+      disabled={disabled}
+      className={[
+        'px-4 py-3 rounded bg-emerald-700 text-white',
+        disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-emerald-800',
+      ].join(' ')}
+      title={!isMyTurn ? 'Wait your turn' : 'Draw a card'}
     >
-      🂠
-    </div>
-    <p className="text-white text-center mt-2 text-sm">{deckCount} left</p>
-  </div>
-);
+      Deck ({deckCount})
+    </button>
+  )});
