@@ -78,7 +78,6 @@ export const PlayerHand: React.FC<Props> = React.memo(
       positions,        // card center positions (px)
       needsScroll,      // whether horizontal scroll is enabled
       scrollWidth,      // full content width for scroll container
-      effW, effH,       // fixed card size
       containerH,       // desktop container height
       leftCenterBound,  // clamp bounds for centers
       rightCenterBound,
@@ -102,9 +101,9 @@ export const PlayerHand: React.FC<Props> = React.memo(
 
       // Build positions as **centers** so first/last never clip
       let positions: number[] = [];
-      let startCenter = 0;
-      let totalSpan = stepX * Math.max(0, n - 1);
+      const totalSpan = stepX * Math.max(0, n - 1);
 
+      let startCenter = 0;
       if (n > 0) {
         if (needsScroll) {
           // Left-aligned scroll: first center at effW/2
@@ -131,8 +130,6 @@ export const PlayerHand: React.FC<Props> = React.memo(
         positions,
         needsScroll,
         scrollWidth,
-        effW,
-        effH,
         containerH,
         leftCenterBound,
         rightCenterBound,
