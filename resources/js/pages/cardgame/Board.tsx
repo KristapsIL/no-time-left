@@ -13,7 +13,7 @@ import { router, usePage } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import RoomChat from '@/components/RoomChat';
 import { PlayerHand } from '@/components/Board/PlayerHand';
-import { OtherPlayers } from '@/components/Board/OtherPlayers';
+import { OtherPlayerHand } from '@/components/Board/OtherPlayerHand';
 import { Deck } from '@/components/Board/Deck';
 import { TopCard } from '@/components/Board/TopCard';
 import { GameControls } from '@/components/Board/GameControls';
@@ -21,6 +21,12 @@ import { GameControls } from '@/components/Board/GameControls';
 import echo from '@/lib/echo';
 import { isValidPlay } from '@/utils/gameLogic';
 import { playCardApi, pickupCardApi, resyncStateApi, resetGameApi} from '@/utils/api';
+
+import { OpponentHandRail } from '@/components/Board/OpponentHandRail';
+import { getSeats } from '@/utils/getSeats';
+
+type PlayerLite = { id: string; name?: string };
+
 
 // ---------- Types ----------
 type Player = { id: number; name?: string };
@@ -454,42 +460,168 @@ const playAgain = useCallback(async () => {
 }, [room.id]);
 
 
-  // ----- Render (your original layout) -----
-  return (
-    <AppLayout>
-      <div className="w-full h-screen flex flex-col items-center justify-between p-6 bg-green-700">
-        {/* Other players */}
-        <OtherPlayers
-          players={(connectedPlayers ?? []).filter((p) => p?.id !== userId)}
-          handCounts={handCounts}
-          currentTurn={currentTurn}
-          userId={userId}
-        />
+// --- Derived seating & counts (number -> string safe) ---
+const connectedPlayersLite: PlayerLite[] = useMemo(
+  () =>
+    uniqById(connectedPlayers).map((p) => ({
+      id: String(p.id),
+      name: p.name,
+    })),
+  [connectedPlayers]
+);
 
-        {/* Center table: deck + top card */}
-        <div className="flex gap-12 items-center justify-center flex-wrap">
-          <Deck deckCount={deckCount} isMyTurn={isMyTurn} pickupCard={onPickup} />
-          <TopCard topCard={topCard} />
-        </div>
+// Seats: left/top/right (+ overflow) relative to the local user
+const seats = useMemo(
+  () => getSeats(connectedPlayersLite, String(userId)),
+  [connectedPlayersLite, userId]
+);
 
-        {/* Player hand */}
-        <PlayerHand hand={hand} topCard={topCard} isMyTurn={isMyTurn} playCard={onPlay} />
+// Helper: is it this seat's turn?
+const isSeatTurn = useCallback(
+  (pid?: string | null) => {
+    if (!pid || game.currentTurn == null) return false;
+    return String(game.currentTurn) === pid;
+  },
+  [game.currentTurn]
+);
 
-        {/* Game controls */}
-        <GameControls
-          roomId={room.id}
-          isStartingGame={isStartingGame}
-          connectedPlayers={connectedPlayers ?? []}
-          isChatOpen={isChatOpen}
-          toggleChat={() => setIsChatOpen((open) => !open)}
-          leaveGame={leaveGame}
-          startGame={startGame}
-        />
-
-        {/* Chat panel */}
-        <RoomChat roomId={room.id} isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+// Card counts for each visible seat (handCounts has string keys)
+const leftCount  = seats.left  ? (game.handCounts[seats.left.id]  ?? 0) : 0;
+const topCount   = seats.top   ? (game.handCounts[seats.top.id]   ?? 0) : 0;
+const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
+return (
+  
+  <AppLayout>
+    {/* Root table grid */}
+    <div
+      className="
+        h-screen w-full
+        grid
+        grid-rows-[auto_1fr_auto]
+        grid-cols-[360px_minmax(0,1fr)_360px]  /* fixed sides, elastic center */
+        gap-4
+        p-4
+        bg-emerald-800
+        text-white
+        relative
+        overflow-hidden
+      "
+    >
+      {/* TOP opponent (row 1, center col) */}
+      <div className="row-start-1 col-start-2 min-w-0 min-h-[220px] flex items-center justify-center">
+        {seats.top ? (
+          <OpponentHandRail
+            side="top"
+            handCount={topCount}
+            isTurn={isSeatTurn(seats.top.id)}
+            label={
+              <div className="flex items-center gap-2">
+                <span className="opacity-90">{seats.top.name ?? `Player ${seats.top.id}`}</span>
+                <span className="bg-black/40 rounded px-1.5 py-0.5">{topCount}</span>
+                {seats.overflow.length > 0 ? (
+                  <span title={seats.overflow.map(p => p.name ?? p.id).join(', ')}>+{seats.overflow.length}</span>
+                ) : null}
+              </div>
+            }
+          />
+        ) : (
+          <div className="opacity-60 text-sm">Waiting for players…</div>
+        )}
       </div>
-      {game.status === 'finished' && (
+
+      {/* LEFT opponent (row 2, left col) */}
+      <div className="row-start-2 col-start-1 w-[360px] min-w-[280px]">
+        {seats.left ? (
+          <OpponentHandRail
+            side="left"
+            handCount={leftCount}
+            isTurn={isSeatTurn(seats.left.id)}
+            label={
+              <div className="flex items-center gap-2">
+                <span className="opacity-90">{seats.left.name ?? `Player ${seats.left.id}`}</span>
+                <span className="bg-black/40 rounded px-1.5 py-0.5">{leftCount}</span>
+              </div>
+            }
+          />
+        ) : (
+          <div className="h-full w-full flex items-center justify-center opacity-50 text-sm">—</div>
+        )}
+      </div>
+
+      {/* CENTER table (row 2, center col): Deck + TopCard */}
+      <div className="row-start-2 col-start-2 min-w-0 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-6">
+          <div className="flex gap-12 items-center justify-center flex-wrap">
+            <Deck
+              deckCount={game.deckCount}
+              isMyTurn={isMyTurn}
+              pickupCard={onPickup}
+            />
+            <TopCard topCard={game.topCard} />
+          </div>
+
+          {game.currentTurn != null && (
+            <div className="text-xs opacity-80">
+              Turn:{' '}
+              <span className="font-semibold">
+                {game.currentTurn === userId ? 'You' : `Player ${game.currentTurn}`}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* RIGHT opponent (row 2, right col) */}
+      <div className="row-start-2 col-start-3 w-[360px] min-w-[280px]">
+        {seats.right ? (
+          <OpponentHandRail
+            side="right"
+            handCount={rightCount}
+            isTurn={isSeatTurn(seats.right.id)}
+            label={
+              <div className="flex items-center gap-2">
+                <span className="opacity-90">{seats.right.name ?? `Player ${seats.right.id}`}</span>
+                <span className="bg-black/40 rounded px-1.5 py-0.5">{rightCount}</span>
+              </div>
+            }
+          />
+        ) : (
+          <div className="h-full w-full flex items-center justify-center opacity-50 text-sm">—</div>
+        )}
+      </div>
+
+      {/* BOTTOM: your hand + controls (row 3, span all cols) */}
+      <div className="row-start-3 col-span-3 flex flex-col items-center gap-3">
+        <PlayerHand
+          hand={game.hand}
+          topCard={game.topCard}
+          isMyTurn={isMyTurn}
+          playCard={onPlay}
+        />
+
+        <div className="w-full max-w-5xl">
+          <GameControls
+            roomId={room.id}
+            isStartingGame={isStartingGame}
+            connectedPlayers={connectedPlayers ?? []}
+            isChatOpen={isChatOpen}
+            toggleChat={() => setIsChatOpen((open) => !open)}
+            leaveGame={leaveGame}
+            startGame={startGame}
+          />
+        </div>
+      </div>
+
+      {/* Chat panel (keep overlay so it doesn't push layout) */}
+      <RoomChat
+        roomId={room.id}
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+      />
+    </div>
+
+    {/* Finish modal */}
+    {game.status === 'finished' && (
       <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
         <div className="bg-black rounded-lg p-6 w-full max-w-md text-center space-y-4 shadow-xl">
           <h2 className="text-2xl font-bold">
@@ -497,7 +629,7 @@ const playAgain = useCallback(async () => {
           </h2>
 
           {game.winnerId !== userId && game.winnerId != null && (
-            <p className="text-gray-700">Winner: Player {game.winnerId}</p>
+            <p className="text-gray-300">Winner: Player {game.winnerId}</p>
           )}
 
           <div className="flex gap-3 justify-center">
@@ -508,17 +640,19 @@ const playAgain = useCallback(async () => {
               Play again
             </button>
             <button
-              className="px-4 py-2 rounded bg-red-500 hover:bg-gray-300"
+              className="px-4 py-2 rounded bg-red-500 hover:bg-red-600 text-white"
               onClick={leaveGame}
             >
               Leave
             </button>
           </div>
 
-          <p className="text-sm text-gray-500">“Play again” resets to Waiting so you can press Start.</p>
+          <p className="text-sm text-gray-400">
+            “Play again” resets to Waiting so you can press Start.
+          </p>
         </div>
       </div>
     )}
-    </AppLayout>
-  );
+  </AppLayout>
+);
 }
