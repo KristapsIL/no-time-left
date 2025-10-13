@@ -70,8 +70,8 @@ function CreateRoom() {
                         <label className="flex gap-2">
                             <input
                                 type="checkbox"
-                                checked={rules.includes("pick_up_till_mach")}
-                                onChange={() => handleRuleChange("pick_up_till_mach")}
+                                checked={rules.includes("pick_up_till_match")}
+                                onChange={() => handleRuleChange("pick_up_till_match")}
                             />
                             Pick up cards till match
                         </label>
