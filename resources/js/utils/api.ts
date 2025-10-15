@@ -35,6 +35,7 @@ function buildError(res: Response, body: any): Error {
 export const playCardApi = async (roomId: number, card: string) => {
   const res = await fetch(`/board/${roomId}/play-card`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
@@ -54,6 +55,7 @@ export const playCardApi = async (roomId: number, card: string) => {
 export const pickupCardApi = async (roomId: number) => {
   const res = await fetch(`/board/${roomId}/pickup`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
@@ -71,6 +73,7 @@ export const pickupCardApi = async (roomId: number) => {
 export const resyncStateApi = async (roomId: number) => {
   const res = await fetch(`/board/${roomId}/resync-state`, {
     method: 'GET',
+    credentials: 'include',
     headers: {
       'Accept': 'application/json',
       'X-Requested-With': 'XMLHttpRequest',
@@ -88,6 +91,7 @@ export const resyncStateApi = async (roomId: number) => {
 export const resetGameApi = async (roomId: number) => {
   const res = await fetch(`/board/${roomId}/reset`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Accept': 'application/json',
       'X-Requested-With': 'XMLHttpRequest',
