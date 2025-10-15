@@ -416,73 +416,81 @@ class CardGameController extends Controller
             $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
             $game = $room->game;
 
-
             if (!$game || $userId !== (int) $game->current_turn) {
                 abort(422, 'Not your turn or game not initialized.');
             }
 
             $hands = $game->player_hands ?? [];
             $deck  = $game->deck ?? [];
-            $this->checkDeckAndReshuffle($deck, $game);
+            $playerKey  = (string) $userId;
+            $playerHand = $hands[$playerKey] ?? [];
+            $drawn      = null; // ensure defined on all paths
 
+            // Ensure deck availability up front
+            $this->checkDeckAndReshuffle($deck, $game);
 
             if (count($deck) === 0) {
                 $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
-                return [$game, $hands[(string)$userId] ?? [], $handCounts, 0, null];
+                return [$game, $playerHand, $handCounts, 0, null];
             }
-            if ($game->has_picked_up == 0) {
 
-                $rulesJson = RoomRules::where('room_id', $roomId)->value('rules');
-                $matchRuleExists = in_array('pick_up_till_match', $rulesJson ?? []);
-
-                $pickedup = 0;
+            if ((int) $game->has_picked_up === 0) {
+                // ---- DRAW PATH ----
+                // Decode rules safely
+                $rulesRaw = RoomRules::where('room_id', $roomId)->value('rules');
+                $rules = is_array($rulesRaw) ? $rulesRaw : (json_decode($rulesRaw ?? '[]', true) ?: []);
+                $matchRuleExists = in_array('pick_up_till_match', $rules, true);
 
                 $usedCards = $game->used_cards ?? [];
-                $topCard = !empty($usedCards)
-                    ? $usedCards[array_key_last($usedCards)]
-                    : null;
+                $topCard   = !empty($usedCards) ? $usedCards[array_key_last($usedCards)] : null;
 
                 do {
                     $this->checkDeckAndReshuffle($deck, $game);
+                    if (count($deck) === 0) break;
 
-                    if (count($deck) === 0) {
-                        break;
-                    }
                     $drawn = array_shift($deck);
-
-
-                    $playerKey   = (string) $userId;
-                    $playerHand  = $hands[$playerKey] ?? [];
                     $playerHand[] = $drawn;
                     $hands[$playerKey] = $playerHand;
 
+                    // Persist after each draw (deck/hand)
                     $game->player_hands = $hands;
-                    $game->deck = $deck;
+                    $game->deck         = $deck;
                     $game->save();
 
-                    $pickedup++;
+                } while ($matchRuleExists && !$this->isValidPlay($drawn, $topCard));
 
-                } while (!$this->isValidPlay($drawn, $topCard) && $matchRuleExists);
+                // Prevent drawing again this turn (your current rule)
                 $game->has_picked_up = true;
                 $game->save();
-            }else{
+
+            } else {
+                // ---- ADVANCE TURN PATH ----
                 $playerIds = $room->players()
                     ->orderBy('room_user.created_at')
                     ->pluck('users.id')
                     ->toArray();
 
-                $currentIndex = array_search($game->current_turn, $playerIds, true);
-                $game->current_turn  = $playerIds[($currentIndex + 1) % max(count($playerIds), 1)] ?? null;
+                // Robust handling if current_turn is not found
+                $currentIndex = array_search((int) $game->current_turn, $playerIds, true);
+                if ($currentIndex === false) {
+                    $currentIndex = -1; // will roll to 0
+                }
+
+                $nextIndex = ($currentIndex + 1) % max(count($playerIds), 1);
+                $game->current_turn  = $playerIds[$nextIndex] ?? null;
                 $game->has_picked_up = false;
                 $game->save();
+
+                // Keep $playerHand and $drawn as set above (no card drawn on this path)
             }
 
             $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
+            $deckCount  = count($deck);
 
-            return [$game, $playerHand, $handCounts, count($deck), $drawn];
-
+            return [$game, $playerHand, $handCounts, $deckCount, $drawn];
         });
 
+        // Broadcast after commit with consistent data
         broadcast(new \App\Events\HandSynced(
             roomId:       $game->room_id,
             userId:       $userId,
@@ -493,15 +501,14 @@ class CardGameController extends Controller
             turnPlayerId: $game->current_turn,
         ));
 
-        // Notify others (counts + deck + top + turn); no full hand for privacy
         broadcast(new \App\Events\CardPlayed(
-            roomId: $game->room_id,
-            userId: $userId,
-            card: '', // pickup (not a play); reusing event shape
-            handCounts: $handCounts,
-            deckCount: $deckCount,
+            roomId:       $game->room_id,
+            userId:       $userId,
+            card:         '', // pickup, not a play
+            handCounts:   $handCounts,
+            deckCount:    $deckCount,
             turnPlayerId: $game->current_turn,
-            usedCards: $game->used_cards ?? []
+            usedCards:    $game->used_cards ?? [],
         ))->toOthers();
 
         return response()->json([
@@ -512,6 +519,7 @@ class CardGameController extends Controller
             'drawn_card'  => $drawnCard, // null if no card drawn
         ], 200);
     }
+
 
     public function resyncState(Request $request, int $roomId)
     {
