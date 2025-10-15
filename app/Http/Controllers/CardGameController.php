@@ -302,6 +302,7 @@ class CardGameController extends Controller
 
                 $currentIndex = array_search($game->current_turn, $playerIds, true);
                 $nextTurn = $playerIds[($currentIndex + 1) % max(count($playerIds), 1)] ?? null;
+                $game->has_picked_up = false;
             }
 
             // Persist game state
@@ -500,22 +501,6 @@ class CardGameController extends Controller
             'used_cards'  => $game->used_cards ?? [],
             'drawn_card'  => $drawnCard, // null if no card drawn
         ], 200);
-    }
-
-    public function nextTurn($roomId){
-        $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
-        $game = $room->game;
-        $playerIds = $room->players()
-            ->orderBy('room_user.created_at')
-            ->pluck('users.id')
-            ->toArray();
-
-        $currentIndex = array_search($game->current_turn, $playerIds, true);
-        $nextTurn = $playerIds[($currentIndex + 1) % max(count($playerIds), 1)] ?? null;
-
-        $game->current_turn = $nextTurn;
-        $game->save();
-        return back();
     }
 
     public function resyncState(Request $request, int $roomId)

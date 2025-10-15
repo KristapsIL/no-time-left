@@ -583,6 +583,7 @@ return (
                 <span className="bg-black/40 rounded px-1.5 py-0.5">{rightCount}</span>
               </div>
             }
+            
           />
         ) : (
           <div className="h-full w-full flex items-center justify-center opacity-50 text-sm">—</div>
@@ -596,6 +597,8 @@ return (
           topCard={game.topCard}
           isMyTurn={isMyTurn}
           playCard={onPlay}
+          minSliver={6}         // tighter overlap between cards
+          maxStepFrac={0.7}
         />
 
         <div className="w-full max-w-5xl">
