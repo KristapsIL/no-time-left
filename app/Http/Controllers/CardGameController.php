@@ -425,6 +425,8 @@ class CardGameController extends Controller
                 $game->current_turn  = $playerIds[($currentIndex + 1) % max(count($playerIds), 1)] ?? null;
                 $game->has_picked_up = false;
                 $game->save();
+
+                return back();
             }
 
             if (!$game || $userId !== (int) $game->current_turn) {
