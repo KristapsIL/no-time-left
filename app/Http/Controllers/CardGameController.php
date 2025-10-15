@@ -415,8 +415,7 @@ class CardGameController extends Controller
         [$game, $hand, $handCounts, $deckCount, $drawnCard] = DB::transaction(function () use ($roomId, $userId) {
             $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
             $game = $room->game;
-            $nextTurn = null;
-            if (!$game || $game->has_picked_up == true) {
+            if (!$game || $game->has_picked_up == 1) {
                  $playerIds = $room->players()
                     ->orderBy('room_user.created_at')
                     ->pluck('users.id')
