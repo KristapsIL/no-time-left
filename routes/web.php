@@ -30,7 +30,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/board/{roomId}/pickup', [CardGameController::class, 'pickUpCard']);
     Route::get('/board/{room}/resync-state', [CardGameController::class, 'resyncState']);
     Route::get('/board/{userId}/game-finish', [CardGameController::class, 'finishGame']);
-    Route::post('/board/{room}/reset', [CardGameController::class, 'reset'])->name('board.reset');
 
     Route::get('/createRoom', [RoomController::class, 'createRoom'])->name('createRoom');
     Route::post('/storeRules', [RoomController::class, 'store'])->name('storeRules');
