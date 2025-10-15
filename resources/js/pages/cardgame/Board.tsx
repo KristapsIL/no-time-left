@@ -489,7 +489,6 @@ const isSeatTurn = useCallback(
 const leftCount  = seats.left  ? (game.handCounts[seats.left.id]  ?? 0) : 0;
 const topCount   = seats.top   ? (game.handCounts[seats.top.id]   ?? 0) : 0;
 const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
-console.log('CSRF Token:', getCsrf());
 
 return (
   
