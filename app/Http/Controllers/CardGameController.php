@@ -415,8 +415,18 @@ class CardGameController extends Controller
         [$game, $hand, $handCounts, $deckCount, $drawnCard] = DB::transaction(function () use ($roomId, $userId) {
             $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
             $game = $room->game;
+            $nextTurn = null;
             if (!$game || $game->has_picked_up == true) {
                 abort(409, 'Cant pick up more');
+                 $playerIds = $room->players()
+                    ->orderBy('room_user.created_at')
+                    ->pluck('users.id')
+                    ->toArray();
+
+                $currentIndex = array_search($game->current_turn, $playerIds, true);
+                $game->current_turn  = $playerIds[($currentIndex + 1) % max(count($playerIds), 1)] ?? null;
+                $game->has_picked_up = false;
+                $game->save();
             }
 
             if (!$game || $userId !== (int) $game->current_turn) {
