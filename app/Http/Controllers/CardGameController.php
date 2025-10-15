@@ -417,7 +417,6 @@ class CardGameController extends Controller
             $game = $room->game;
             $nextTurn = null;
             if (!$game || $game->has_picked_up == true) {
-                abort(409, 'Cant pick up more');
                  $playerIds = $room->players()
                     ->orderBy('room_user.created_at')
                     ->pluck('users.id')
