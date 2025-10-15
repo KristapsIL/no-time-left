@@ -415,19 +415,7 @@ class CardGameController extends Controller
         [$game, $hand, $handCounts, $deckCount, $drawnCard] = DB::transaction(function () use ($roomId, $userId) {
             $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
             $game = $room->game;
-            if (!$game || $game->has_picked_up == 1) {
-                 $playerIds = $room->players()
-                    ->orderBy('room_user.created_at')
-                    ->pluck('users.id')
-                    ->toArray();
 
-                $currentIndex = array_search($game->current_turn, $playerIds, true);
-                $game->current_turn  = $playerIds[($currentIndex + 1) % max(count($playerIds), 1)] ?? null;
-                $game->has_picked_up = false;
-                $game->save();
-
-                return back();
-            }
 
             if (!$game || $userId !== (int) $game->current_turn) {
                 abort(422, 'Not your turn or game not initialized.');
@@ -442,40 +430,52 @@ class CardGameController extends Controller
                 $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
                 return [$game, $hands[(string)$userId] ?? [], $handCounts, 0, null];
             }
+            if ($game->has_picked_up == 0) {
 
-            $rulesJson = RoomRules::where('room_id', $roomId)->value('rules');
-            $matchRuleExists = in_array('pick_up_till_match', $rulesJson ?? []);
+                $rulesJson = RoomRules::where('room_id', $roomId)->value('rules');
+                $matchRuleExists = in_array('pick_up_till_match', $rulesJson ?? []);
 
-            $pickedup = 0;
+                $pickedup = 0;
 
-            $usedCards = $game->used_cards ?? [];
-            $topCard = !empty($usedCards)
-                ? $usedCards[array_key_last($usedCards)]
-                : null;
+                $usedCards = $game->used_cards ?? [];
+                $topCard = !empty($usedCards)
+                    ? $usedCards[array_key_last($usedCards)]
+                    : null;
 
-            do {
-                $this->checkDeckAndReshuffle($deck, $game);
+                do {
+                    $this->checkDeckAndReshuffle($deck, $game);
 
-                if (count($deck) === 0) {
-                    break;
-                }
-                $drawn = array_shift($deck);
+                    if (count($deck) === 0) {
+                        break;
+                    }
+                    $drawn = array_shift($deck);
 
 
-                $playerKey   = (string) $userId;
-                $playerHand  = $hands[$playerKey] ?? [];
-                $playerHand[] = $drawn;
-                $hands[$playerKey] = $playerHand;
+                    $playerKey   = (string) $userId;
+                    $playerHand  = $hands[$playerKey] ?? [];
+                    $playerHand[] = $drawn;
+                    $hands[$playerKey] = $playerHand;
 
-                $game->player_hands = $hands;
-                $game->deck = $deck;
+                    $game->player_hands = $hands;
+                    $game->deck = $deck;
+                    $game->save();
+
+                    $pickedup++;
+
+                } while (!$this->isValidPlay($drawn, $topCard) && $matchRuleExists);
+                $game->has_picked_up = true;
                 $game->save();
+            }else{
+                $playerIds = $room->players()
+                    ->orderBy('room_user.created_at')
+                    ->pluck('users.id')
+                    ->toArray();
 
-                $pickedup++;
-
-            } while (!$this->isValidPlay($drawn, $topCard) && $matchRuleExists);
-            $game->has_picked_up = true;
-            $game->save();
+                $currentIndex = array_search($game->current_turn, $playerIds, true);
+                $game->current_turn  = $playerIds[($currentIndex + 1) % max(count($playerIds), 1)] ?? null;
+                $game->has_picked_up = false;
+                $game->save();
+            }
 
             $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
 
