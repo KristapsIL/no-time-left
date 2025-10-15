@@ -414,6 +414,9 @@ class CardGameController extends Controller
         [$game, $hand, $handCounts, $deckCount, $drawnCard] = DB::transaction(function () use ($roomId, $userId) {
             $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
             $game = $room->game;
+            if (!$game || $game->has_picked_up == true) {
+                abort(409, 'Cant pick up more');
+            }
 
             if (!$game || $userId !== (int) $game->current_turn) {
                 abort(422, 'Not your turn or game not initialized.');
@@ -460,6 +463,8 @@ class CardGameController extends Controller
                 $pickedup++;
 
             } while (!$this->isValidPlay($drawn, $topCard) && $matchRuleExists);
+            $game->has_picked_up = true;
+            $game->save();
 
             $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
 
@@ -495,6 +500,22 @@ class CardGameController extends Controller
             'used_cards'  => $game->used_cards ?? [],
             'drawn_card'  => $drawnCard, // null if no card drawn
         ], 200);
+    }
+
+    public function nextTurn($roomId){
+        $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
+        $game = $room->game;
+        $playerIds = $room->players()
+            ->orderBy('room_user.created_at')
+            ->pluck('users.id')
+            ->toArray();
+
+        $currentIndex = array_search($game->current_turn, $playerIds, true);
+        $nextTurn = $playerIds[($currentIndex + 1) % max(count($playerIds), 1)] ?? null;
+
+        $game->current_turn = $nextTurn;
+        $game->save();
+        return back();
     }
 
     public function resyncState(Request $request, int $roomId)

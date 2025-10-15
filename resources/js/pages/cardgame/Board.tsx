@@ -13,7 +13,6 @@ import { router, usePage } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import RoomChat from '@/components/RoomChat';
 import { PlayerHand } from '@/components/Board/PlayerHand';
-import { OtherPlayerHand } from '@/components/Board/OtherPlayerHand';
 import { Deck } from '@/components/Board/Deck';
 import { TopCard } from '@/components/Board/TopCard';
 import { GameControls } from '@/components/Board/GameControls';

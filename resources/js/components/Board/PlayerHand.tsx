@@ -15,15 +15,10 @@ type Props = {
   isMyTurn: boolean;
   playCard: (card: string) => void;
 
-  /** Left/right safe padding so cards never touch borders (px). Default: 64 */
   edgeGutter?: number;
-  /** Card size (fixed; no scaling). Default: 110x160 */
   cardSize?: { w: number; h: number };
-  /** Minimum visible sliver between cards (px). Default: 12 */
   minSliver?: number;
-  /** Maximum step as a fraction of card width (≈ no overlap). Default: 0.95 */
   maxStepFrac?: number;
-  /** How much neighbors shift on hover (px). Default: 16 */
   hoverSpread?: number;
 };
 
