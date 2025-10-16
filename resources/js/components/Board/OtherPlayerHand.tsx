@@ -32,7 +32,6 @@ function useElementSize<T extends HTMLElement>() {
 export const OtherPlayerHand: React.FC<Props> = ({
   handCount,
   isTurn, // eslint-disable-line @typescript-eslint/no-unused-vars
-  edgeGutter = 32,
   cardSize = { w: 110, h: 160 },
   minSliver = 12,
   maxStepFrac = 0.95,

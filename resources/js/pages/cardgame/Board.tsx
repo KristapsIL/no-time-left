@@ -644,16 +644,16 @@ const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
               roomId={room.id}
               isStartingGame={false}
               connectedPlayers={connectedPlayers}
-              isChatOpen={false}
-              toggleChat={() => {}}
+              isChatOpen={isChatOpen}
+              toggleChat={() => setIsChatOpen((open) => !open)}
               leaveGame={leaveGame}
-              startGame={() => {}}
+              startGame={startGame}
               currentTurn={game.currentTurn}
             />
           </div>
         </div>
 
-        <RoomChat roomId={room.id} isOpen={false} onClose={() => {}} />
+        <RoomChat roomId={room.id} isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
       </div>
 
       {game.status === 'finished' && (
