@@ -8,8 +8,7 @@ import React, {
   useState,
   startTransition,
 } from 'react';
-import { router, usePage } from '@inertiajs/react';
-
+import { Head, router, usePage } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import RoomChat from '@/components/RoomChat';
 import { PlayerHand } from '@/components/Board/PlayerHand';
@@ -491,9 +490,8 @@ const topCount   = seats.top   ? (game.handCounts[seats.top.id]   ?? 0) : 0;
 const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
 
 return (
-  
   <AppLayout>
-    {/* Root table grid */}
+    <Head title="Game" />
     <div
       className="
         h-screen w-full
@@ -607,16 +605,15 @@ return (
           <GameControls
             roomId={room.id}
             isStartingGame={isStartingGame}
-            connectedPlayers={connectedPlayers ?? []}
+            connectedPlayers={connectedPlayers}
             isChatOpen={isChatOpen}
-            toggleChat={() => setIsChatOpen((open) => !open)}
+            toggleChat={() => setIsChatOpen(v => !v)}
             leaveGame={leaveGame}
             startGame={startGame}
+            currentTurn={game.currentTurn}
           />
         </div>
       </div>
-
-      {/* Chat panel (keep overlay so it doesn't push layout) */}
       <RoomChat
         roomId={room.id}
         isOpen={isChatOpen}
@@ -624,7 +621,6 @@ return (
       />
     </div>
 
-    {/* Finish modal */}
     {game.status === 'finished' && (
       <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
         <div className="bg-black rounded-lg p-6 w-full max-w-md text-center space-y-4 shadow-xl">

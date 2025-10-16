@@ -1,9 +1,9 @@
 import React from 'react';
 
 type Player = {
-    id: number;
-    name?: string | null;
-    email?: string | null;
+  id: number;
+  name?: string | null;
+  email?: string | null;
 };
 
 type Props = {
@@ -14,8 +14,10 @@ type Props = {
   toggleChat: () => void;
   leaveGame: () => void;
   startGame: () => void;
-};
 
+  // NEW: pass the current turn from parent
+  currentTurn: number | null;
+};
 
 export const GameControls = ({
   isStartingGame,
@@ -24,18 +26,26 @@ export const GameControls = ({
   toggleChat,
   leaveGame,
   startGame,
+  currentTurn,
 }: Props) => (
   <div className="absolute bottom-6 left-6 flex gap-3">
-
     {connectedPlayers.length >= 2 && (
-    <button
+      <button
         onClick={startGame}
-        disabled={isStartingGame}
-        className={`px-3 py-2 rounded text-white transition-colors
-                    ${isStartingGame ? 'bg-gray-500 cursor-not-allowed' : 'bg-green-500 hover:bg-green-600'}`}
-    >
-        {isStartingGame ? 'Starting...' : 'Start Game'}
-    </button>
+        disabled={isStartingGame || currentTurn !== null}
+        aria-disabled={isStartingGame || currentTurn !== null}
+        className={`px-3 py-2 rounded text-white transition-colors ${
+          isStartingGame || currentTurn !== null
+            ? 'bg-gray-500 cursor-not-allowed'
+            : 'bg-green-500 hover:bg-green-600'
+        }`}
+      >
+        {isStartingGame
+          ? 'Starting...'
+          : currentTurn !== null
+          ? 'Game in progress'
+          : 'Start Game'}
+      </button>
     )}
 
     <button
@@ -44,6 +54,7 @@ export const GameControls = ({
     >
       Leave Game
     </button>
+
     <button
       onClick={toggleChat}
       className={`flex items-center gap-2 px-3 py-2 rounded transition-colors ${
