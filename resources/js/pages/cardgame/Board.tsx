@@ -423,9 +423,6 @@ const pickupCard = useCallback(async () => {
     console.log('Leaving...');
     router.visit('/findRoom');
   }, []);
-
-  // ----- Derived -----
-  const { hand, topCard, deckCount, handCounts, currentTurn } = game;
    
 
 const canPlayCard = useCallback(
