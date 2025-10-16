@@ -2,87 +2,121 @@ import React, { useState } from "react";
 import AppLayout from '@/layouts/app-layout';
 import { Head, router } from "@inertiajs/react";
 
+export default function CreateRoom() {
+  const [Name, setName] = useState<string>('');
+  const [isPublic, setIsPublic] = useState(true);
+  const [maxPlayers, setMaxPlayers] = useState(2);
+  const [rules, setRules] = useState<string[]>([]);
 
-
-function CreateRoom() {
-    const [Name, setName] =  useState<string>('');
-    const [isPublic, setIsPublic] = useState(true);
-    const [maxPlayers, setMaxPlayers] = useState(2);
-    const [rules, setRules] = useState<string[]>([]);
-
-    const handleRuleChange = (rule: string) => {
-        setRules((prev) =>
-        prev.includes(rule) ? prev.filter((r) => r !== rule) : [...prev, rule]
-        );
-    };
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        router.post("/storeRules", {
-        room_name: Name,
-        public: isPublic,
-        max_players: maxPlayers,
-        rules: rules,
-        });
-    };
-
-    return (
-        <AppLayout>
-            <Head title="Create Room" />
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-            <div>
-                <label className="block mb-1">Room Name</label>
-                <input
-                    type="text" 
-                    value={Name}  // bind the value to state
-                    onChange={(e) => setName(e.target.value)}
-                    className="border px-2 py-1 rounded w-full"
-                    placeholder="Enter room name"
-                    required
-                />
-            </div>
-
-                <div>
-                    <label className="block mb-1">Public Room?</label>
-                    <input
-                        type="checkbox"
-                        checked={isPublic}
-                        onChange={(e) => setIsPublic(e.target.checked)}
-                    />
-                </div>
-
-                <div>
-                    <label className="block mb-1">Max Players</label>
-                    <input
-                        type="number"
-                        value={maxPlayers}
-                        min={2}
-                        max={4}
-                        onChange={(e) => setMaxPlayers(Number(e.target.value))}
-                        className="border px-2 py-1 rounded"
-                    />
-                </div>
-
-                <div>
-                    <label className="block mb-2">Rules</label>
-                    <div>
-
-                        <label className="flex gap-2">
-                            <input
-                                type="checkbox"
-                                checked={rules.includes("pick_up_till_match")}
-                                onChange={() => handleRuleChange("pick_up_till_match")}
-                            />
-                            Pick up cards till match
-                        </label>
-                    </div>
-                </div>
-
-                <button type="submit" className="px-3 py-1 rounded bg-indigo-600 text-white">
-                Create Room
-                </button>
-            </form>
-        </AppLayout>
+  const handleRuleChange = (rule: string) => {
+    setRules((prev) =>
+      prev.includes(rule) ? prev.filter((r) => r !== rule) : [...prev, rule]
     );
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    router.post("/storeRules", {
+      room_name: Name,
+      public: isPublic,
+      max_players: maxPlayers,
+      rules: rules,
+    });
+  };
+
+  return (
+    <AppLayout>
+      <Head title="Create Room" />
+      <div className="p-6 flex justify-center">
+        <form
+          onSubmit={handleSubmit}
+          className="w-full max-w-lg bg-white dark:bg-neutral-900 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6 space-y-6"
+        >
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-4">
+            Create a New Room
+          </h1>
+
+          {/* Room Name */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Room Name
+            </label>
+            <input
+              type="text"
+              value={Name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-gray-800 dark:text-gray-100 dark:bg-neutral-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+              placeholder="Enter room name"
+              required
+            />
+          </div>
+
+          {/* Public Toggle */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Visibility
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={isPublic}
+                onChange={(e) => setIsPublic(e.target.checked)}
+                className="h-4 w-4 accent-indigo-600"
+              />
+              <span className="text-gray-700 dark:text-gray-300">
+                Public Room
+              </span>
+            </label>
+          </div>
+
+          {/* Max Players */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Max Players
+            </label>
+            <select
+              value={maxPlayers}
+              onChange={(e) => setMaxPlayers(Number(e.target.value))}
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 dark:bg-neutral-800 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value={2}>2 Players</option>
+              <option value={3}>3 Players</option>
+              <option value={4}>4 Players</option>
+            </select>
+          </div>
+
+          {/* Rules */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Rules
+            </label>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={rules.includes("pick_up_till_match")}
+                  onChange={() => handleRuleChange("pick_up_till_match")}
+                  className="h-4 w-4 accent-indigo-600"
+                />
+                <span className="text-gray-700 dark:text-gray-300">
+                  Pick up cards until match
+                </span>
+              </label>
+              {/* Add more rules here */}
+            </div>
+          </div>
+
+          {/* Submit Button */}
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+            >
+              Create Room
+            </button>
+          </div>
+        </form>
+      </div>
+    </AppLayout>
+  );
 }
-export default CreateRoom;

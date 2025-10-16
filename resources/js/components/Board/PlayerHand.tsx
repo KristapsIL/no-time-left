@@ -16,6 +16,7 @@ type Props = {
   playCard: (card: string) => void;
 
   edgeGutter?: number;
+
   cardSize?: { w: number; h: number };
   minSliver?: number;
   maxStepFrac?: number;

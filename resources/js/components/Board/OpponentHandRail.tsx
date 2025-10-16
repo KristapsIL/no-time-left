@@ -1,4 +1,4 @@
-// components/Board/OpponentHandRail.tsx
+// resources/js/components/Board/OpponentHandRail.tsx
 import React from 'react';
 import { OtherPlayerHand } from './OtherPlayerHand';
 
@@ -15,15 +15,23 @@ export const OpponentHandRail: React.FC<OpponentHandRailProps> = ({
   isTurn,
   label,
 }) => {
-  // Rotation for side rails; top stays horizontal
-  const rotation =
-    side === 'left' ? '-rotate-90' : side === 'right' ? 'rotate-90' : '';
+  // ---- SUPER COMPACT PRESETS ----
+  const SIDE_WIDTH = 96;                 // very slim rails
+  const SIDE_HEIGHT = 160;               // compact vertical slot for rotated hand
+  const TOP_INLINE_SIZE = 'clamp(360px, 40cqi, 620px)'; // container-relative; needs [container-type:inline-size] on parent
+  const TOP_BLOCK_SIZE = 150;            // top rail height
 
-  // Sizing presets per side (tweak to taste)
-  const cardSize =
-    side === 'top'
-      ? { w: 100, h: 145 }
-      : { w: 96, h: 140 }; // slightly smaller on sides
+  const isSide = side !== 'top';
+
+  // Smaller cards on both; extra small on sides
+  const cardSize = isSide
+    ? { w: 72, h: 106 }    // sides
+    : { w: 88, h: 128 };   // top
+  // Dense overlap; sides tighter than top
+  const minSliver   = isSide ? 4   : 8;    // minimum visible slice of next card
+  const maxStepFrac = isSide ? 0.45 : 0.75;
+
+  const angle = side === 'left' ? -90 : side === 'right' ? 90 : 0;
 
   return (
     <div className="w-full h-full flex items-center justify-center">
@@ -39,21 +47,39 @@ export const OpponentHandRail: React.FC<OpponentHandRailProps> = ({
           </div>
         ) : null}
 
+        {/* Clipping wrapper prevents the rotated rail from overlapping neighbors */}
         <div
-          className={[
-            'relative',
-            'transition-shadow',
-            rotation,
-          ].join(' ')}
+          className="relative overflow-hidden"
           style={{
-            // Constrain width for the rail; OtherPlayerHand measures width pre-rotation
-            width: side === 'top' ? 'min(960px, 95vw)' : '340px',
-            height: side === 'top' ? '200px' : '240px',
+            width:  isSide ? `${SIDE_WIDTH}px`  : TOP_INLINE_SIZE,
+            height: isSide ?  SIDE_HEIGHT       : TOP_BLOCK_SIZE,
           }}
         >
-          <OtherPlayerHand handCount={handCount} isTurn={isTurn} cardSize={cardSize} />
+          {/* Rotated inner plane; swap width/height for side rails */}
+          <div
+            className="absolute left-1/2 top-1/2"
+            style={{
+              transformOrigin: 'center',
+              transform: `translate(-50%, -50%) rotate(${angle}deg)`,
+              width:  isSide ? `${SIDE_HEIGHT}px` : '100%',
+              height: isSide ? `${SIDE_WIDTH}px`  : '100%',
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'center',
+            }}
+          >
+            {/* OtherPlayerHand measures pre-rotation size; packing controlled by minSliver/maxStepFrac */}
+            <OtherPlayerHand
+              handCount={handCount}
+              isTurn={isTurn}
+              cardSize={cardSize}
+              minSliver={minSliver}
+              maxStepFrac={maxStepFrac}
+              allowScroll={false}
+            />
+          </div>
         </div>
       </div>
     </div>
   );
-}
+};

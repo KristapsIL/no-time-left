@@ -1,13 +1,16 @@
-import React, { useMemo, useState, useLayoutEffect, useRef, useEffect } from 'react';
-import { CardView } from '@/components/Board/CardView';
+// resources/js/components/Board/OtherPlayerHand.tsx
+import React, { useMemo, useState, useLayoutEffect, useRef } from 'react';
+import { CardBack } from '@/components/Board/CardBack';
 
 type Props = {
-  handCount: number;          // Number of cards other player has
-  isTurn: boolean;            // Highlight if it’s their turn
+  handCount: number;
+  isTurn: boolean;
   edgeGutter?: number;
   cardSize?: { w: number; h: number };
   minSliver?: number;
   maxStepFrac?: number;
+  /** NEW: disable horizontal scrolling and just clip overflow */
+  allowScroll?: boolean; // <- add
 };
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
@@ -28,15 +31,18 @@ function useElementSize<T extends HTMLElement>() {
 
 export const OtherPlayerHand: React.FC<Props> = ({
   handCount,
-  isTurn,
+  isTurn, // eslint-disable-line @typescript-eslint/no-unused-vars
   edgeGutter = 32,
   cardSize = { w: 110, h: 160 },
   minSliver = 12,
   maxStepFrac = 0.95,
+  allowScroll = true,             // <- default
 }) => {
   const [boxRef, boxSize] = useElementSize<HTMLDivElement>();
 
-  const { positions, needsScroll, scrollWidth, containerH, leftCenterBound, rightCenterBound } = useMemo(() => {
+  const {
+    positions, needsScroll, scrollWidth, containerH, leftCenterBound, rightCenterBound,
+  } = useMemo(() => {
     const n = handCount;
     const effW = cardSize.w;
     const effH = cardSize.h;
@@ -47,7 +53,8 @@ export const OtherPlayerHand: React.FC<Props> = ({
     stepX = n > 1 ? clamp(stepX, minSliver, maxStep) : 0;
 
     const contentWidth = n > 0 ? effW + stepX * (n - 1) : 0;
-    const needsScroll = contentWidth > usableW + 0.5;
+    // Only allow scrolling when explicitly allowed
+    const needsScroll = allowScroll && contentWidth > usableW + 0.5;
 
     let positions: number[] = [];
     const totalSpan = stepX * Math.max(0, n - 1);
@@ -58,6 +65,7 @@ export const OtherPlayerHand: React.FC<Props> = ({
         startCenter = effW / 2;
         positions = Array.from({ length: n }, (_, i) => startCenter + i * stepX);
       } else {
+        // Center the fan; excess will be clipped by parent if it overflows
         startCenter = -totalSpan / 2;
         positions = Array.from({ length: n }, (_, i) => startCenter + i * stepX);
       }
@@ -67,16 +75,23 @@ export const OtherPlayerHand: React.FC<Props> = ({
       positions,
       needsScroll,
       scrollWidth: Math.ceil(contentWidth) + 1,
-      containerH: Math.max(200, Math.ceil(effH + 24)),
+      containerH: Math.max(160, Math.ceil(effH + 24)),
       leftCenterBound: startCenter,
       rightCenterBound: startCenter + totalSpan,
     };
-  }, [handCount, boxSize.width, cardSize.w, cardSize.h, minSliver, maxStepFrac]);
+  }, [handCount, boxSize.width, cardSize.w, cardSize.h, minSliver, maxStepFrac, allowScroll]);
 
   return (
     <div className="w-full select-none">
       <div ref={boxRef} className="relative" style={{ height: containerH, overflowX: 'hidden' }}>
-        <div className="relative h-full overflow-x-auto overflow-y-hidden" style={{ width: '100%' }}>
+        <div
+          className={`relative h-full overflow-y-hidden ${needsScroll ? 'overflow-x-auto' : ''}`}
+          style={{
+            width: '100%',
+            overflowX: needsScroll ? 'auto' : ('clip' as const), // <- clip when no scroll
+            overscrollBehaviorX: 'contain',
+          }}
+        >
           <div className="relative h-full" style={{ width: needsScroll ? `${scrollWidth}px` : '100%' }}>
             <div className={`absolute ${needsScroll ? 'left-0' : 'left-1/2 -translate-x-1/2'} bottom-0`}>
               {positions.map((x, idx) => {
@@ -93,12 +108,13 @@ export const OtherPlayerHand: React.FC<Props> = ({
                       zIndex: z,
                     }}
                   >
-                    <CardView
-                      card="yo" // Always show back
-                      disabled={true}
-                      selected={false}
-                      className={`shadow-lg ${isTurn ? 'ring-2 ring-yellow-300' : ''}`}
-                      style={{ width: cardSize.w, height: cardSize.h }}
+                    <CardBack
+                      width={cardSize.w}
+                      height={cardSize.h}
+                      fillColor="#1f2937"
+                      bandColor="#0ea5e9"
+                      rimColor="rgba(0,0,0,0.35)"
+                      label=""
                     />
                   </div>
                 );

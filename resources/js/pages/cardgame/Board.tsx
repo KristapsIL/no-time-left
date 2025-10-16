@@ -489,170 +489,208 @@ const leftCount  = seats.left  ? (game.handCounts[seats.left.id]  ?? 0) : 0;
 const topCount   = seats.top   ? (game.handCounts[seats.top.id]   ?? 0) : 0;
 const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
 
-return (
-  <AppLayout>
-    <Head title="Game" />
-    <div
-      className="
-        h-screen w-full
-        grid
-        grid-rows-[auto_1fr_auto]
-        grid-cols-[360px_minmax(0,1fr)_360px]  /* fixed sides, elastic center */
-        gap-4
-        p-4
-        bg-emerald-800
-        text-white
-        relative
-        overflow-hidden
-      "
-    >
-      {/* TOP opponent (row 1, center col) */}
-      <div className="row-start-1 col-start-2 min-w-0 min-h-[220px] flex items-center justify-center">
-        {seats.top ? (
-          <OpponentHandRail
-            side="top"
-            handCount={topCount}
-            isTurn={isSeatTurn(seats.top.id)}
-            label={
-              <div className="flex items-center gap-2">
-                <span className="opacity-90">{seats.top.name ?? `Player ${seats.top.id}`}</span>
-                <span className="bg-black/40 rounded px-1.5 py-0.5">{topCount}</span>
-                {seats.overflow.length > 0 ? (
-                  <span title={seats.overflow.map(p => p.name ?? p.id).join(', ')}>+{seats.overflow.length}</span>
-                ) : null}
-              </div>
-            }
-          />
-        ) : (
-          <div className="opacity-60 text-sm">Waiting for players…</div>
-        )}
-      </div>
 
-      {/* LEFT opponent (row 2, left col) */}
-      <div className="row-start-2 col-start-1 w-[360px] min-w-[280px]">
-        {seats.left ? (
-          <OpponentHandRail
-            side="left"
-            handCount={leftCount}
-            isTurn={isSeatTurn(seats.left.id)}
-            label={
-              <div className="flex items-center gap-2">
-                <span className="opacity-90">{seats.left.name ?? `Player ${seats.left.id}`}</span>
-                <span className="bg-black/40 rounded px-1.5 py-0.5">{leftCount}</span>
-              </div>
-            }
-          />
-        ) : (
-          <div className="h-full w-full flex items-center justify-center opacity-50 text-sm">—</div>
-        )}
-      </div>
 
-      {/* CENTER table (row 2, center col): Deck + TopCard */}
-      <div className="row-start-2 col-start-2 min-w-0 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-6">
-          <div className="flex gap-12 items-center justify-center flex-wrap">
-            <Deck
-              deckCount={game.deckCount}
-              isMyTurn={isMyTurn}
-              pickupCard={onPickup}
+  return (
+    <AppLayout>
+      <Head title="Game" />
+      <div
+        className="
+          h-screen w-full grid
+          /* Mobile-first: single column stack */
+          grid-cols-1 grid-rows-[auto_auto_1fr_auto]
+          /* Desktop: 3 columns slim sides */
+          md:grid-rows-[auto_1fr_auto]
+          md:grid-cols-[96px_minmax(0,1fr)_96px]
+          lg:grid-cols-[112px_minmax(0,1fr)_112px]
+          gap-3 md:gap-4 p-3 md:p-4
+          bg-emerald-800 text-white relative overflow-hidden
+          pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]
+        "
+      >
+        {/* TOP opponent (row 1, center col) */}
+        <div
+          className="
+            row-start-1 col-start-1 md:col-start-2
+            min-w-0 min-h-[150px] md:min-h-[150px]
+            flex items-center justify-center
+            [container-type:inline-size]  /* enables cqi for OpponentHandRail top width */
+          "
+        >
+          {seats.top ? (
+            <OpponentHandRail
+              side="top"
+              handCount={topCount}
+              isTurn={isSeatTurn(seats.top.id)}
+              label={
+                <div className="flex items-center gap-2">
+                  <span className="opacity-90">{seats.top.name ?? `Player ${seats.top.id}`}</span>
+                  <span className="bg-black/40 rounded px-1.5 py-0.5">{topCount}</span>
+                  {seats.overflow.length > 0 ? (
+                    <span title={seats.overflow.map(p => p.name ?? p.id).join(', ')}>
+                      +{seats.overflow.length}
+                    </span>
+                  ) : null}
+                </div>
+              }
             />
-            <TopCard topCard={game.topCard} />
-          </div>
-
-          {game.currentTurn != null && (
-            <div className="text-xs opacity-80">
-              Turn:{' '}
-              <span className="font-semibold">
-                {game.currentTurn === userId ? 'You' : `Player ${game.currentTurn}`}
-              </span>
-            </div>
+          ) : (
+            <div className="opacity-60 text-sm">Waiting for players…</div>
           )}
         </div>
-      </div>
 
-      {/* RIGHT opponent (row 2, right col) */}
-      <div className="row-start-2 col-start-3 w-[360px] min-w-[280px]">
-        {seats.right ? (
-          <OpponentHandRail
-            side="right"
-            handCount={rightCount}
-            isTurn={isSeatTurn(seats.right.id)}
-            label={
-              <div className="flex items-center gap-2">
-                <span className="opacity-90">{seats.right.name ?? `Player ${seats.right.id}`}</span>
-                <span className="bg-black/40 rounded px-1.5 py-0.5">{rightCount}</span>
+        {/* MOBILE-ONLY: inline opponents strip (row 2) */}
+        <div className="md:hidden row-start-2 col-start-1">
+          <div className="flex items-center gap-3 overflow-x-auto scrollbar-none px-1 touch-pan-y">
+            {seats.left && (
+              <div className="[container-type:inline-size]">
+                <OpponentHandRail
+                  side="left"
+                  handCount={leftCount}
+                  isTurn={isSeatTurn(seats.left.id)}
+                  label={
+                    <div className="flex items-center gap-2">
+                      <span className="opacity-90">{seats.left.name ?? `Player ${seats.left.id}`}</span>
+                      <span className="bg-black/40 rounded px-1.5 py-0.5">{leftCount}</span>
+                    </div>
+                  }
+                />
               </div>
-            }
-            
-          />
-        ) : (
-          <div className="h-full w-full flex items-center justify-center opacity-50 text-sm">—</div>
-        )}
-      </div>
-
-      {/* BOTTOM: your hand + controls (row 3, span all cols) */}
-      <div className="row-start-3 col-span-3 flex flex-col items-center gap-3">
-        <PlayerHand
-          hand={game.hand}
-          topCard={game.topCard}
-          isMyTurn={isMyTurn}
-          playCard={onPlay}
-          minSliver={6}         // tighter overlap between cards
-          maxStepFrac={0.7}
-        />
-
-        <div className="w-full max-w-5xl">
-          <GameControls
-            roomId={room.id}
-            isStartingGame={isStartingGame}
-            connectedPlayers={connectedPlayers}
-            isChatOpen={isChatOpen}
-            toggleChat={() => setIsChatOpen(v => !v)}
-            leaveGame={leaveGame}
-            startGame={startGame}
-            currentTurn={game.currentTurn}
-          />
-        </div>
-      </div>
-      <RoomChat
-        roomId={room.id}
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-      />
-    </div>
-
-    {game.status === 'finished' && (
-      <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
-        <div className="bg-black rounded-lg p-6 w-full max-w-md text-center space-y-4 shadow-xl">
-          <h2 className="text-2xl font-bold">
-            {game.winnerId === userId ? 'You win! 🎉' : 'Game over'}
-          </h2>
-
-          {game.winnerId !== userId && game.winnerId != null && (
-            <p className="text-gray-300">Winner: Player {game.winnerId}</p>
-          )}
-
-          <div className="flex gap-3 justify-center">
-            <button
-              className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700"
-              onClick={playAgain}
-            >
-              Play again
-            </button>
-            <button
-              className="px-4 py-2 rounded bg-red-500 hover:bg-red-600 text-white"
-              onClick={leaveGame}
-            >
-              Leave
-            </button>
+            )}
+            {seats.right && (
+              <div className="[container-type:inline-size]">
+                <OpponentHandRail
+                  side="right"
+                  handCount={rightCount}
+                  isTurn={isSeatTurn(seats.right.id)}
+                  label={
+                    <div className="flex items-center gap-2">
+                      <span className="opacity-90">{seats.right.name ?? `Player ${seats.right.id}`}</span>
+                      <span className="bg-black/40 rounded px-1.5 py-0.5">{rightCount}</span>
+                    </div>
+                  }
+                />
+              </div>
+            )}
           </div>
-
-          <p className="text-sm text-gray-400">
-            “Play again” resets to Waiting so you can press Start.
-          </p>
         </div>
+
+        {/* DESKTOP LEFT opponent */}
+        <div className="hidden md:flex row-start-2 col-start-1 min-w-0 items-center justify-center">
+          {seats.left ? (
+            <OpponentHandRail
+              side="left"
+              handCount={leftCount}
+              isTurn={isSeatTurn(seats.left.id)}
+              label={
+                <div className="flex items-center gap-2">
+                  <span className="opacity-90">{seats.left.name ?? `Player ${seats.left.id}`}</span>
+                  <span className="bg-black/40 rounded px-1.5 py-0.5">{leftCount}</span>
+                </div>
+              }
+            />
+          ) : (
+            <div className="h-full w-full flex items-center justify-center opacity-50 text-sm"></div>
+          )}
+        </div>
+
+        {/* CENTER table */}
+        <div className="row-start-3 md:row-start-2 col-start-1 md:col-start-2 min-w-0 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-6">
+            <div className="flex gap-12 items-center justify-center flex-wrap">
+              <Deck deckCount={game.deckCount} isMyTurn={isMyTurn} pickupCard={onPickup} />
+              <TopCard topCard={game.topCard} />
+            </div>
+
+            {game.currentTurn != null && (
+              <div className="text-xs opacity-80">
+                Turn:{' '}
+                <span className="font-semibold">
+                  {game.currentTurn === userId ? 'You' : `Player ${game.currentTurn}`}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* DESKTOP RIGHT opponent */}
+        <div className="hidden md:flex row-start-2 col-start-3 min-w-0 items-center justify-center">
+          {seats.right ? (
+            <OpponentHandRail
+              side="right"
+              handCount={rightCount}
+              isTurn={isSeatTurn(seats.right.id)}
+              label={
+                <div className="flex items-center gap-2">
+                  <span className="opacity-90">{seats.right.name ?? `Player ${seats.right.id}`}</span>
+                  <span className="bg-black/40 rounded px-1.5 py-0.5">{rightCount}</span>
+                </div>
+              }
+            />
+          ) : (
+            <div className="h-full w-full flex items-center justify-center opacity-50 text-sm"></div>
+          )}
+        </div>
+
+        {/* BOTTOM: your hand + controls */}
+        <div className="row-start-4 md:row-start-3 col-span-1 md:col-span-3 flex flex-col items-center gap-3">
+          <PlayerHand
+            hand={game.hand}
+            topCard={game.topCard}
+            isMyTurn={isMyTurn}
+            playCard={onPlay}
+            minSliver={6}
+            maxStepFrac={0.7}
+          />
+          <div className="w-full max-w-5xl">
+            <GameControls
+              roomId={room.id}
+              isStartingGame={false}
+              connectedPlayers={connectedPlayers}
+              isChatOpen={false}
+              toggleChat={() => {}}
+              leaveGame={leaveGame}
+              startGame={() => {}}
+              currentTurn={game.currentTurn}
+            />
+          </div>
+        </div>
+
+        <RoomChat roomId={room.id} isOpen={false} onClose={() => {}} />
       </div>
-    )}
-  </AppLayout>
-);
-}
+
+      {game.status === 'finished' && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
+          <div className="bg-black rounded-lg p-6 w-full max-w-md text-center space-y-4 shadow-xl">
+            <h2 className="text-2xl font-bold">
+              {game.winnerId === userId ? 'You win! 🎉' : 'Game over'}
+            </h2>
+
+            {game.winnerId !== userId && game.winnerId != null && (
+              <p className="text-gray-300">Winner: Player {game.winnerId}</p>
+            )}
+
+            <div className="flex gap-3 justify-center">
+              <button
+                className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700"
+                onClick={playAgain}
+              >
+                Play again
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-red-500 hover:bg-red-600 text-white"
+                onClick={leaveGame}
+              >
+                Leave
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-400">
+              “Play again” resets to Waiting so you can press Start.
+            </p>
+          </div>
+        </div>
+      )}
+    </AppLayout>
+  );
+};

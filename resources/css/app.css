@@ -139,3 +139,20 @@
         @apply bg-background text-foreground;
     }
 }
+
+@layer utilities {
+  /* Hide scrollbar visuals but keep scrollability */
+  .scrollbar-none {
+    -ms-overflow-style: none;  /* IE/Edge legacy */
+    scrollbar-width: none;     /* Firefox */
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;             /* Chrome/Safari/Opera (non-standard but common) */
+  }
+
+  /* Useful for preventing accidental horizontal panning on touch */
+  .touch-pan-y {
+    touch-action: pan-y;
+  }
+}
+

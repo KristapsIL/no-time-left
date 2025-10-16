@@ -23,15 +23,15 @@ export default function FindRoom({ rooms }: Props) {
         <AppLayout>
             <Head title="Find a Room" />
             <div className="p-6 space-y-4">
-                <h1 className="text-xl font-bold mb-4">Available Rooms</h1>
+                <h1 className="text-xl font-bold mb-4">Rooms</h1>
 
                 {rooms.length === 0 ? (
                     <p>No rooms found</p>
                 ) : (
-                    <div className="space-y-2">
-                        {rooms.map((room) => (
-                            <RoomCard key={room.id} room={room} />
-                        ))}
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {rooms.map((room) => (
+                        <RoomCard key={room.id} room={room} />
+                    ))}
                     </div>
                 )}
             </div>
