@@ -36,11 +36,10 @@ class CardGameController extends Controller
         [$room, $game] = DB::transaction(function () use ($roomId) {
             $room = Room::query()
                 ->whereKey($roomId)
-                ->with(['players', 'rules'])    // eager-load for the UI
+                ->with(['players', 'rules']) 
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            // unique index on card_games.room_id recommended (see migration below)
             $game = CardGame::firstOrCreate(
                 ['room_id' => $room->id],
                 [
@@ -49,7 +48,6 @@ class CardGameController extends Controller
                 ]
             );
 
-            // If game existed but deck is empty (e.g., manual DB changes), re-seed while waiting
             if ($game->game_status === 'waiting' && empty($game->deck)) {
                 $game->deck = $this->buildDeck();
                 $game->save();
@@ -58,22 +56,19 @@ class CardGameController extends Controller
             return [$room, $game];
         });
 
-        // 3) Privacy-preserving payload for the client
         $playerHands = $game->player_hands ?? [];
         $myHand      = $playerHands[$user->id] ?? [];
         $handCounts  = collect($playerHands)->map(fn ($cards) => is_array($cards) ? count($cards) : 0);
 
-        // If your Room model has an accessor getCodeAttribute() returning room_code,
-        // the "code" field will be present automatically. Alternatively, map it explicitly below.
         $roomArray = $room->toArray();
-        $roomArray['code'] = $room->room_code; // remove if you added an accessor
+        $roomArray['code'] = $room->room_code; 
 
         return Inertia::render('cardgame/Board', [
-            'room'       => $roomArray,                 // contains id, code, rules, players
+            'room'       => $roomArray,                 
             'deck'       => $game->deck ?? [],
             'usedCards'  => $game->used_cards ?? [],
-            'handCounts' => $handCounts,                // { userId: count }
-            'myHand'     => array_values($myHand),      // only my hand
+            'handCounts' => $handCounts,                
+            'myHand'     => array_values($myHand),     
             'userId'     => $user->id,
         ]);
     }
@@ -180,7 +175,6 @@ class CardGameController extends Controller
         [$game, $hands, $deck, $usedCards, $players] = DB::transaction(function () use ($roomId, $userId) {
             $room = Room::with(['players', 'game', 'rules'])->lockForUpdate()->findOrFail($roomId);
 
-            // Validations
             $this->validateStartConditions($room, $userId);
 
             $game = $room->game ?? new CardGame(['room_id' => $room->id]);
@@ -195,7 +189,6 @@ class CardGameController extends Controller
             $firstCard  = array_shift($deck);
             $usedCards  = [$firstCard];
 
-            // First player starts
             $firstTurnId = $players->first()->id;
             $this->initializeGame($game, $hands, $deck, $usedCards, $firstTurnId);
 
@@ -206,7 +199,6 @@ class CardGameController extends Controller
         $deckCount  = count($deck);
         $turnId     = $game->current_turn;
 
-        // Broadcast the start to everyone (shared fields)
         broadcast(new GameStarted(
             roomId:       $game->room_id,
             handCounts:   $handCounts,
@@ -269,27 +261,22 @@ class CardGameController extends Controller
             $playerKey = (string) $userId;
             $hand = $hands[$playerKey] ?? [];
 
-            // Validate the player has the card (exactly one instance)
             $idx = array_search($card, $hand, true);
             if ($idx === false) {
                 abort(422, 'Card not in hand');
             }
 
-            // Validate play against current top card (if any)
             $usedArr = $game->used_cards ?? [];
             $topCard = !empty($usedArr) ? end($usedArr) : null;
             if ($topCard && !$this->isValidPlay($card, $topCard)) {
                 abort(422, 'Invalid play');
             }
 
-            // Remove exactly one instance of the card
             array_splice($hand, $idx, 1);
             $hands[$playerKey] = $hand;
 
-            // Add to used pile (top will be this card)
             $usedArr[] = $card;
 
-            // Determine if finished, and next turn if not finished
             $finished = count($hand) === 0;
             $winnerId = $finished ? $userId : null;
 
@@ -305,7 +292,6 @@ class CardGameController extends Controller
                 $game->has_picked_up = false;
             }
 
-            // Persist game state
             $game->player_hands = $hands;
             $game->used_cards   = array_values($usedArr);
             $game->current_turn = $finished ? null : $nextTurn;
@@ -341,7 +327,6 @@ class CardGameController extends Controller
         ));
 
         if ($finished) {
-            // Notify others the game finished
             broadcast(new \App\Events\GameFinished(
                 roomId: $roomIdOut,
                 winnerId: $winnerId,
@@ -354,7 +339,6 @@ class CardGameController extends Controller
             ], 200);
         }
 
-        // Notify others about the shared changes
         broadcast(new \App\Events\CardPlayed(
             roomId: $roomIdOut,
             userId: $userId,
@@ -379,7 +363,6 @@ class CardGameController extends Controller
 
     protected function splitCard(string $code): array
     {
-        // robust split: limit 2 parts, tolerate bad input
         $parts = explode('-', $code, 2);
         $value = $parts[0] ?? '';
         $suit  = $parts[1] ?? '';
@@ -392,12 +375,12 @@ class CardGameController extends Controller
         if (count($deck) === 0) {
             $top = null;
             if (!empty($used)) {
-                $top = array_pop($used); // keep visible top
+                $top = array_pop($used);
             }
 
             if (!empty($used)) {
                 shuffle($used);
-                $deck = array_values($used); // updates caller's $deck
+                $deck = array_values($used); 
             } else {
                 $deck = [];
             }
@@ -424,9 +407,8 @@ class CardGameController extends Controller
             $deck  = $game->deck ?? [];
             $playerKey  = (string) $userId;
             $playerHand = $hands[$playerKey] ?? [];
-            $drawn      = null; // ensure defined on all paths
+            $drawn = null; 
 
-            // Ensure deck availability up front
             $this->checkDeckAndReshuffle($deck, $game);
 
             if (count($deck) === 0) {
@@ -435,8 +417,6 @@ class CardGameController extends Controller
             }
 
             if ((int) $game->has_picked_up === 0) {
-                // ---- DRAW PATH ----
-                // Decode rules safely
                 $rulesRaw = RoomRules::where('room_id', $roomId)->value('rules');
                 $rules = is_array($rulesRaw) ? $rulesRaw : (json_decode($rulesRaw ?? '[]', true) ?: []);
                 $matchRuleExists = in_array('pick_up_till_match', $rules, true);
@@ -452,36 +432,30 @@ class CardGameController extends Controller
                     $playerHand[] = $drawn;
                     $hands[$playerKey] = $playerHand;
 
-                    // Persist after each draw (deck/hand)
                     $game->player_hands = $hands;
                     $game->deck         = $deck;
                     $game->save();
 
                 } while ($matchRuleExists && !$this->isValidPlay($drawn, $topCard));
 
-                // Prevent drawing again this turn (your current rule)
                 $game->has_picked_up = true;
                 $game->save();
 
             } else {
-                // ---- ADVANCE TURN PATH ----
                 $playerIds = $room->players()
                     ->orderBy('room_user.created_at')
                     ->pluck('users.id')
                     ->toArray();
 
-                // Robust handling if current_turn is not found
                 $currentIndex = array_search((int) $game->current_turn, $playerIds, true);
                 if ($currentIndex === false) {
-                    $currentIndex = -1; // will roll to 0
+                    $currentIndex = -1;
                 }
 
                 $nextIndex = ($currentIndex + 1) % max(count($playerIds), 1);
                 $game->current_turn  = $playerIds[$nextIndex] ?? null;
                 $game->has_picked_up = false;
                 $game->save();
-
-                // Keep $playerHand and $drawn as set above (no card drawn on this path)
             }
 
             $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
@@ -504,7 +478,7 @@ class CardGameController extends Controller
         broadcast(new \App\Events\CardPlayed(
             roomId:       $game->room_id,
             userId:       $userId,
-            card:         '', // pickup, not a play
+            card:         '',
             handCounts:   $handCounts,
             deckCount:    $deckCount,
             turnPlayerId: $game->current_turn,
@@ -516,7 +490,7 @@ class CardGameController extends Controller
             'hand_counts' => $handCounts,
             'deck_count'  => $deckCount,
             'used_cards'  => $game->used_cards ?? [],
-            'drawn_card'  => $drawnCard, // null if no card drawn
+            'drawn_card'  => $drawnCard,
         ], 200);
     }
 
@@ -528,7 +502,6 @@ class CardGameController extends Controller
         $room = Room::with(['players', 'game'])->findOrFail($roomId);
         $game = $room->game;
 
-        // Pārbaude: vai lietotājs ir istabā
         if (!$room->players()->where('users.id', $userId)->exists()) {
             abort(403, 'You must join this room first.');
         }

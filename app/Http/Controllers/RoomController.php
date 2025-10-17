@@ -8,9 +8,6 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
-use App\Events\HandSynced;
-
-
 
 class RoomController extends Controller
 {
@@ -64,11 +61,11 @@ class RoomController extends Controller
         $userId = $request->user()->id;
 
         DB::table('room_user')->updateOrInsert(
-            ['user_id' => $userId],  // unique on user_id
+            ['user_id' => $userId],
             [
                 'room_id'    => $roomId,
                 'updated_at' => now(),
-                'created_at' => now(), // will reset; omit if you care to preserve
+                'created_at' => now(), 
             ]
         );
 
