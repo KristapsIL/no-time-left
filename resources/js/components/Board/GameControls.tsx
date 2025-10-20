@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 type Player = {
   id: number;
@@ -14,12 +14,10 @@ type Props = {
   toggleChat: () => void;
   leaveGame: () => void;
   startGame: () => void;
-
-  // NEW: pass the current turn from parent
   currentTurn: number | null;
 };
 
-export const GameControls = ({
+export const GameControls: React.FC<Props> = ({
   isStartingGame,
   connectedPlayers,
   isChatOpen,
@@ -27,43 +25,63 @@ export const GameControls = ({
   leaveGame,
   startGame,
   currentTurn,
-}: Props) => (
-  <div className="absolute bottom-6 left-6 flex gap-3">
-    {connectedPlayers.length >= 2 && (
+}) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="absolute bottom-6 left-6">
+      {/* Main toggle button */}
       <button
-        onClick={startGame}
-        disabled={isStartingGame || currentTurn !== null}
-        aria-disabled={isStartingGame || currentTurn !== null}
-        className={`px-3 py-2 rounded text-white transition-colors ${
-          isStartingGame || currentTurn !== null
-            ? 'bg-gray-500 cursor-not-allowed'
-            : 'bg-green-500 hover:bg-green-600'
-        }`}
+        onClick={() => setOpen((o) => !o)}
+        className="px-4 py-2 rounded bg-neutral-800 text-white hover:bg-neutral-700 transition"
       >
-        {isStartingGame
-          ? 'Starting...'
-          : currentTurn !== null
-          ? 'Game in progress'
-          : 'Start Game'}
+        ☰ Menu
       </button>
-    )}
 
-    <button
-      onClick={leaveGame}
-      className="px-3 py-2 rounded bg-red-500 text-white hover:bg-red-600 transition-colors"
-    >
-      Leave Game
-    </button>
-
-    <button
-      onClick={toggleChat}
-      className={`flex items-center gap-2 px-3 py-2 rounded transition-colors ${
-        isChatOpen
-          ? 'bg-blue-500 text-white hover:bg-blue-600'
-          : 'bg-neutral-200 text-neutral-700 hover:bg-neutral-300 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700'
-      }`}
-    >
-      {isChatOpen ? 'Close Chat' : 'Open Chat'}
-    </button>
-  </div>
-);
+      {/* Dropdown panel (opens UP) */}
+      {open && (
+        <div
+          className="absolute bottom-full mb-2 w-48 bg-white dark:bg-neutral-900 shadow-lg rounded border border-neutral-200 dark:border-neutral-700 z-50"
+        >
+          <ul className="flex flex-col">
+            {connectedPlayers.length >= 2 && (
+              <li>
+                <button
+                  onClick={startGame}
+                  disabled={isStartingGame || currentTurn !== null}
+                  className={`w-full text-left px-4 py-2 ${
+                    isStartingGame || currentTurn !== null
+                      ? 'text-gray-400 cursor-not-allowed'
+                      : 'hover:bg-green-100 dark:hover:bg-green-800'
+                  }`}
+                >
+                  {isStartingGame
+                    ? 'Starting...'
+                    : currentTurn !== null
+                    ? 'Game in progress'
+                    : 'Start Game'}
+                </button>
+              </li>
+            )}
+            <li>
+              <button
+                onClick={leaveGame}
+                className="w-full text-left px-4 py-2 hover:bg-red-100 dark:hover:bg-red-800"
+              >
+                Leave Game
+              </button>
+            </li>
+            <li>
+              <button
+                onClick={toggleChat}
+                className="w-full text-left px-4 py-2 hover:bg-blue-100 dark:hover:bg-blue-800"
+              >
+                {isChatOpen ? 'Close Chat' : 'Open Chat'}
+              </button>
+            </li>
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};
