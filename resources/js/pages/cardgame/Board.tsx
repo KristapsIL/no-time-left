@@ -501,7 +501,7 @@ const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
           md:grid-cols-[96px_minmax(0,1fr)_96px]
           lg:grid-cols-[112px_minmax(0,1fr)_112px]
           gap-3 md:gap-4 p-3 md:p-4
-          bg-emerald-800 text-white relative overflow-hidden
+          bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white relative overflow-hidden
           pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]
         "
       >

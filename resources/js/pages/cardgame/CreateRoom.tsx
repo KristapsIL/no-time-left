@@ -27,14 +27,21 @@ export default function CreateRoom() {
   return (
     <AppLayout>
       <Head title="Create Room" />
-      <div className="p-6 flex justify-center">
-        <form
-          onSubmit={handleSubmit}
-          className="w-full max-w-lg bg-white dark:bg-neutral-900 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6 space-y-6"
-        >
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-4 text-center">
-            Create a New Room
-          </h1>
+      <div className="p-6 flex justify-center min-h-screen">
+        <div className="w-full max-w-lg">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+              Create New Room
+            </h1>
+            <p className="text-gray-600 dark:text-gray-300">
+              Set up your game with custom rules and invite friends
+            </p>
+          </div>
+          
+          <form
+            onSubmit={handleSubmit}
+            className="bg-white dark:bg-neutral-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-8 space-y-6"
+          >
 
           {/* Room Name */}
           <div>
@@ -106,16 +113,17 @@ export default function CreateRoom() {
             </div>
           </div>
 
-          {/* Submit Button */}
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
-            >
-              Create Room
-            </button>
-          </div>
-        </form>
+            {/* Submit Button */}
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                Create Room
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </AppLayout>
   );
