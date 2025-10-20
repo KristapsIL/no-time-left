@@ -58,7 +58,7 @@ export const CardView: React.FC<CardViewProps> = ({
   const base = [
     'w-14 h-20 rounded-lg border bg-white shadow-sm relative',
     'transition-transform',
-    disabled ? 'opacity-50 cursor-not-allowed' : 'hover:-translate-y-1',
+    disabled ? 'cursor-not-allowed' : 'hover:-translate-y-1',
     selected ? 'ring-2 ring-amber-400' : '',
     colorClass,
     className || '',

@@ -208,7 +208,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
                             isHover ? 'scale-[1.06]' : '',
                             canPlay
                               ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-emerald-900 cursor-pointer focus:ring-2 focus:ring-yellow-300'
-                              : 'opacity-95 cursor-not-allowed',
+                              : ' cursor-not-allowed',
                           ].join(' ')}
                           style={{ width: cardSize.w, height: cardSize.h }}
                           tabIndex={canPlay ? 0 : -1}
