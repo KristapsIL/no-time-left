@@ -595,7 +595,7 @@ const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
         <div className="row-start-3 md:row-start-2 col-start-1 md:col-start-2 min-w-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-6">
             <div className="flex gap-12 items-center justify-center flex-wrap">
-              <Deck deckCount={game.deckCount} isMyTurn={isMyTurn} pickupCard={onPickup} />
+              <Deck isMyTurn={isMyTurn} pickupCard={onPickup} />
               <TopCard topCard={game.topCard} />
             </div>
 

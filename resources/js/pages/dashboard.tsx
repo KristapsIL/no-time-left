@@ -84,7 +84,7 @@ export default function Dashboard() {
                 🎮 Find Game
               </button>
               <button 
-                onClick={() => router.visit('/cardgame/create-room')}
+                onClick={() => router.visit('/createRoom')}
                 className="px-8 py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all duration-300 transform hover:scale-105 shadow-lg text-lg"
               >
                 ➕ Create Room
