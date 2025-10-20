@@ -24,17 +24,6 @@ export default function RoomCard({ room, currentUserId }: { room: Room; currentU
   const isExistingPlayer = currentUserId && room.players?.some(player => player.id === currentUserId);
   const canJoin = isExistingPlayer || (!isRoomFull && !isGameActive && !isGameFinished);
 
-  const getStatusText = () => {
-    if (isExistingPlayer && isGameActive) return 'Your Game - In Progress';
-    if (isExistingPlayer && isGameFinished) return 'Your Game - Finished';
-    if (isGameActive) return 'Game in Progress';
-    if (isGameFinished) return 'Game Finished';
-    if (isRoomFull) return 'Room Full';
-    if (gameStatus === 'waiting') return `Waiting (${currentPlayers}/${maxPlayers})`;
-    return `Available (${currentPlayers}/${maxPlayers})`;
-  };
-
-
   return (
     <div className={`rounded-xl border bg-white dark:bg-neutral-900 shadow hover:shadow-lg transition p-4 flex flex-col justify-between ${
       isExistingPlayer 
