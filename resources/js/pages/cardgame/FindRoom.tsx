@@ -12,13 +12,24 @@ type Room = {
         max_players: number;
         rules: string[];
     };
+    game?: {
+        game_status: 'waiting' | 'starting' | 'in_progress' | 'finished';
+    } | null;
+    players?: Array<{ id: number; name: string }> | null;
 };
 
 type Props = {
     rooms: Room[];
+    auth: {
+        user: {
+            id: number;
+            name: string;
+            email: string;
+        };
+    };
 };
 
-export default function FindRoom({ rooms }: Props) {
+export default function FindRoom({ rooms, auth }: Props) {
     return (
         <AppLayout>
             <Head title="Find a Room" />
@@ -42,7 +53,7 @@ export default function FindRoom({ rooms }: Props) {
                     ) : (
                         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                         {rooms.map((room) => (
-                            <RoomCard key={room.id} room={room} />
+                            <RoomCard key={room.id} room={room} currentUserId={auth.user.id} />
                         ))}
                         </div>
                     )}
