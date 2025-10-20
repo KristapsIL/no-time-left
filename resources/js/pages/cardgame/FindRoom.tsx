@@ -23,7 +23,7 @@ export default function FindRoom({ rooms }: Props) {
         <AppLayout>
             <Head title="Find a Room" />
             <div className="p-6 space-y-4">
-                <h1 className="text-xl font-bold mb-4">Rooms</h1>
+                <h1 className="text-xl font-bold mb-4 text-center">Rooms</h1>
 
                 {rooms.length === 0 ? (
                     <p>No rooms found</p>

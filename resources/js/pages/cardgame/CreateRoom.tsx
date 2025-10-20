@@ -32,7 +32,7 @@ export default function CreateRoom() {
           onSubmit={handleSubmit}
           className="w-full max-w-lg bg-white dark:bg-neutral-900 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6 space-y-6"
         >
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-4">
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-4 text-center">
             Create a New Room
           </h1>
 
