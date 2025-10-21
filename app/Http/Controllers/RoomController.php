@@ -61,22 +61,18 @@ class RoomController extends Controller
         $userId = $request->user()->id;
         $room = Room::with(['game', 'players'])->findOrFail($roomId);
         
-        // Check if user is already a player in this room
         $isExistingPlayer = $room->players()->where('user_id', $userId)->exists();
         
-        // If user is already a player, allow them to rejoin regardless of game status
         if ($isExistingPlayer) {
             return redirect()->route('board', ['roomId' => $roomId])
                 ->with('success', 'Welcome back! You have rejoined the game.');
         }
         
-        // For new players, check if game is active
         if ($room->isGameActive()) {
             return redirect()->route('findRoom')
                 ->with('error', 'Cannot join room: Game is currently in progress.');
         }
         
-        // Check if room is full
         $currentPlayerCount = $room->players()->count();
         $maxPlayers = $room->rules->max_players ?? 4;
         
@@ -85,13 +81,11 @@ class RoomController extends Controller
                 ->with('error', 'Cannot join room: Room is full.');
         }
         
-        // Check if game is finished
         if ($room->game && $room->game->isFinished()) {
             return redirect()->route('findRoom')
                 ->with('error', 'Cannot join room: Game has finished.');
         }
 
-        // Add new player to room
         DB::table('room_user')->updateOrInsert(
             ['user_id' => $userId],
             [
