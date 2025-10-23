@@ -25,7 +25,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/board/{roomId}', [CardGameController::class, 'board'])->name('board');
     Route::post('/board/{roomId}/shuffle', [CardGameController::class, 'shuffle'])->name('board.shuffle');
     Route::post('/board/{roomId}/reset', [CardGameController::class, 'reset'])->name('board.reset');
-    Route::post('/board/{roomId}/start-game', [CardGameController::class, 'startGame'] )->name('startGame');
+    Route::match(['get', 'post'], '/board/{roomId}/start-game', [CardGameController::class, 'startGame'] )->name('startGame');
     Route::post('/board/{roomId}/play-card', [CardGameController::class, 'playCard']);
     Route::post('/board/{roomId}/pickup', [CardGameController::class, 'pickUpCard']);
     Route::get('/board/{room}/resync-state', [CardGameController::class, 'resyncState']);
@@ -37,6 +37,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/joinroom/{roomId}', [RoomController::class, 'joinRoom'])->name('joinRoom');
     Route::delete('/leaveroom/{roomId}', [RoomController::class, 'leaveRoom'])->name('leaveRoom');
     Route::get('/rooms/{room}/resync-hand', [RoomController::class, 'resyncHand']);
+    Route::delete('/deleteRoom', [RoomController::class, 'deleteRoom'])->name('deleteRoom');
     
     Route::get('/test-event', [RoomController::class, 'test'])->name('test-event');
     

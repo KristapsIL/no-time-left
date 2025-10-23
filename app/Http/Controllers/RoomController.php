@@ -105,4 +105,9 @@ class RoomController extends Controller
         $request->user()->rooms()->detach($roomId);
         return redirect()->route('findRoom');
     }
+    public function deleteRoom($roomId){
+        $room = Room::findOrFail($roomId);
+        $room->delete();
+        return back();
+    }
 }

@@ -130,13 +130,12 @@ class CardGameController extends Controller
 
     private function validateStartConditions(Room $room, int $userId): void
     {
-        $isMember = $room->players()->whereKey($userId)->exists();
-        if (!$isMember) {
+        if (!$room->players()->whereKey($userId)->exists()) {
             throw new \Exception('You must join this room before starting the game.');
         }
 
         if ($room->game && $room->game->game_status === 'in_progress') {
-            throw new \Exception('Game already in progress.');
+            throw new \Exception('The game has already started!');
         }
 
         if ($room->players()->count() < 2) {
@@ -166,61 +165,63 @@ class CardGameController extends Controller
             'game_started_at' => now(),
         ])->save();
     }
-
-    
     public function startGame(Request $request, int $roomId)
     {
-        $userId = $request->user()->id;
+        try{
+            $userId = $request->user()->id;
 
-        [$game, $hands, $deck, $usedCards, $players] = DB::transaction(function () use ($roomId, $userId) {
-            $room = Room::with(['players', 'game', 'rules'])->lockForUpdate()->findOrFail($roomId);
+            [$game, $hands, $deck, $usedCards, $players] = DB::transaction(function () use ($roomId, $userId) {
+                $room = Room::with(['players', 'game', 'rules'])->lockForUpdate()->findOrFail($roomId);
 
-            $this->validateStartConditions($room, $userId);
+                $this->validateStartConditions($room, $userId);
 
-            $game = $room->game ?? new CardGame(['room_id' => $room->id]);
-            $deck =  $this->buildDeck();
-            shuffle($deck);
+                $game = $room->game ?? new CardGame(['room_id' => $room->id]);
+                $deck =  $this->buildDeck();
+                shuffle($deck);
 
-            $cardsPerPlayer = $room->rules->cards_per_player ?? 6;
-            $players = $room->players()->orderBy('room_user.created_at')->get();
+                $cardsPerPlayer = $room->rules->cards_per_player ?? 6;
+                $players = $room->players()->orderBy('room_user.created_at')->get();
 
-            $hands = $this->dealCards($deck, $players, $cardsPerPlayer);
+                $hands = $this->dealCards($deck, $players, $cardsPerPlayer);
 
-            $firstCard  = array_shift($deck);
-            $usedCards  = [$firstCard];
+                $firstCard  = array_shift($deck);
+                $usedCards  = [$firstCard];
 
-            $firstTurnId = $players->first()->id;
-            $this->initializeGame($game, $hands, $deck, $usedCards, $firstTurnId);
+                $firstTurnId = $players->first()->id;
+                $this->initializeGame($game, $hands, $deck, $usedCards, $firstTurnId);
 
-            return [$game, $hands, $deck, $usedCards, $players];
-        });
+                return [$game, $hands, $deck, $usedCards, $players];
+            });
 
-        $handCounts = collect($hands)->map(fn($h) => count($h))->toArray();
-        $deckCount  = count($deck);
-        $turnId     = $game->current_turn;
+            $handCounts = collect($hands)->map(fn($h) => count($h))->toArray(); 
+            $deckCount  = count($deck);
+            $turnId     = $game->current_turn;
 
-        broadcast(new GameStarted(
-            roomId:       $game->room_id,
-            handCounts:   $handCounts,
-            usedCards:    $usedCards,
-            turnPlayerId: $turnId,
-            deckCount:    $deckCount
-        ));
-
-        foreach ($players as $p) {
-            $pid = (int) $p->id;
-            broadcast(new HandSynced(
+            broadcast(new GameStarted(
                 roomId:       $game->room_id,
-                userId:       $pid,
-                hand:         $hands[(string)$pid] ?? [],
                 handCounts:   $handCounts,
-                deckCount:    $deckCount,
                 usedCards:    $usedCards,
                 turnPlayerId: $turnId,
+                deckCount:    $deckCount
             ));
-        }
 
-    return redirect()->back()->with('success', 'Game Started');
+            foreach ($players as $p) {
+                $pid = (int) $p->id;
+                broadcast(new HandSynced(
+                    roomId:       $game->room_id,
+                    userId:       $pid,
+                    hand:         $hands[(string)$pid] ?? [],
+                    handCounts:   $handCounts,
+                    deckCount:    $deckCount,
+                    usedCards:    $usedCards,
+                    turnPlayerId: $turnId,
+                ));
+            }
+
+            return redirect()->back()->with('success', 'Game Started');
+        } catch (\Exception $e) {
+        return redirect()->back()->with('error', $e->getMessage());
+    }
     }
 
     public function updateDeckState(CardGame $game, array $deck, array $usedCards): void
