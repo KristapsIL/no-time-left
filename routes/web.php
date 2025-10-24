@@ -60,7 +60,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return response()->json(['success' => true]);
     })->name('send-message');
      
-    // Room-specific chat API
     Route::post('/send-room-message', function(\Illuminate\Http\Request $request) {
         $request->validate([
             'message' => 'required|string|max:255',
