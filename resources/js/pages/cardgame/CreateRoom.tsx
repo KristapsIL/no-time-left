@@ -41,7 +41,6 @@ export default function CreateRoom() {
           <form
             onSubmit={handleSubmit}
             className="bg-white dark:bg-neutral-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-8 space-y-6"
-            data-testid="create-room-form"
             aria-label="Create Room Form"
           >
 
@@ -56,7 +55,6 @@ export default function CreateRoom() {
               <input
                 id="room_name"
                 name="room_name"
-                data-testid="room_name"
                 type="text"
                 value={Name}
                 onChange={(e) => setName(e.target.value)}
@@ -80,7 +78,6 @@ export default function CreateRoom() {
                 <input
                   id="public"
                   name="public"
-                  data-testid="public"
                   type="checkbox"
                   checked={isPublic}
                   onChange={(e) => setIsPublic(e.target.checked)}
@@ -104,7 +101,6 @@ export default function CreateRoom() {
               <select
                 id="max_players"
                 name="max_players"
-                data-testid="max_players"
                 value={maxPlayers}
                 onChange={(e) => setMaxPlayers(Number(e.target.value))}
                 className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 dark:bg-neutral-800 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500"
@@ -127,7 +123,6 @@ export default function CreateRoom() {
                   <input
                     id="rule-pick_up_till_match"
                     name="rules[]"
-                    data-testid="rule-pick_up_till_match"
                     type="checkbox"
                     checked={rules.includes("pick_up_till_match")}
                     onChange={() => handleRuleChange("pick_up_till_match")}
