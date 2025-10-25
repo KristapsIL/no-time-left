@@ -37,87 +37,134 @@ export default function CreateRoom() {
               Set up your game with custom rules and invite friends
             </p>
           </div>
-          
+
           <form
             onSubmit={handleSubmit}
             className="bg-white dark:bg-neutral-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-8 space-y-6"
+            data-testid="create-room-form"
+            aria-label="Create Room Form"
           >
 
-          {/* Room Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Room Name
-            </label>
-            <input
-              type="text"
-              value={Name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-gray-800 dark:text-gray-100 dark:bg-neutral-800 focus:ring-2 focus:ring-indigo-500 outline-none"
-              placeholder="Enter room name"
-              required
-            />
-          </div>
-
-          {/* Public Toggle */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Visibility
-            </label>
-            <label className="inline-flex items-center gap-2">
+            {/* Room Name */}
+            <div>
+              <label
+                htmlFor="room_name"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
+                Room Name
+              </label>
               <input
-                type="checkbox"
-                checked={isPublic}
-                onChange={(e) => setIsPublic(e.target.checked)}
-                className="h-4 w-4 accent-indigo-600"
+                id="room_name"
+                name="room_name"
+                data-testid="room_name"
+                type="text"
+                value={Name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-gray-800 dark:text-gray-100 dark:bg-neutral-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder="Enter room name"
+                required
+                aria-required="true"
+                aria-describedby="room_name_help"
               />
-              <span className="text-gray-700 dark:text-gray-300">
-                Public Room
+              <p id="room_name_help" className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                4–254 characters. Must be unique.
+              </p>
+            </div>
+
+            {/* Public Toggle */}
+            <div>
+              <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Visibility
               </span>
-            </label>
-          </div>
-
-          {/* Max Players */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Max Players
-            </label>
-            <select
-              value={maxPlayers}
-              onChange={(e) => setMaxPlayers(Number(e.target.value))}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 dark:bg-neutral-800 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value={2}>2 Players</option>
-              <option value={3}>3 Players</option>
-              <option value={4}>4 Players</option>
-            </select>
-          </div>
-
-          {/* Rules */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Rules
-            </label>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2">
+              <label className="inline-flex items-center gap-2">
                 <input
+                  id="public"
+                  name="public"
+                  data-testid="public"
                   type="checkbox"
-                  checked={rules.includes("pick_up_till_match")}
-                  onChange={() => handleRuleChange("pick_up_till_match")}
+                  checked={isPublic}
+                  onChange={(e) => setIsPublic(e.target.checked)}
                   className="h-4 w-4 accent-indigo-600"
+                  aria-checked={isPublic}
                 />
                 <span className="text-gray-700 dark:text-gray-300">
-                  Pick up cards until match
+                  Public Room
                 </span>
               </label>
-              {/* Add more rules here */}
             </div>
-          </div>
+
+            {/* Max Players */}
+            <div>
+              <label
+                htmlFor="max_players"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
+                Max Players
+              </label>
+              <select
+                id="max_players"
+                name="max_players"
+                data-testid="max_players"
+                value={maxPlayers}
+                onChange={(e) => setMaxPlayers(Number(e.target.value))}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 dark:bg-neutral-800 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500"
+                aria-label="Select max players"
+              >
+                <option value={2}>2 Players</option>
+                <option value={3}>3 Players</option>
+                <option value={4}>4 Players</option>
+              </select>
+            </div>
+
+            {/* Rules */}
+            <div>
+              <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Rules
+              </span>
+
+              <div className="space-y-2" role="group" aria-label="Rules">
+                <label className="flex items-center gap-2">
+                  <input
+                    id="rule-pick_up_till_match"
+                    name="rules[]"
+                    data-testid="rule-pick_up_till_match"
+                    type="checkbox"
+                    checked={rules.includes("pick_up_till_match")}
+                    onChange={() => handleRuleChange("pick_up_till_match")}
+                    className="h-4 w-4 accent-indigo-600"
+                    aria-checked={rules.includes("pick_up_till_match")}
+                    value="pick_up_till_match"
+                  />
+                  <span className="text-gray-700 dark:text-gray-300">
+                    Pick up cards until match
+                  </span>
+                </label>
+
+                {/* 
+                <label className="flex items-center gap-2">
+                  <input
+                    id="rule-skip"
+                    name="rules[]"
+                    data-testid="rule-skip"
+                    type="checkbox"
+                    checked={rules.includes("skip")}
+                    onChange={() => handleRuleChange("skip")}
+                    className="h-4 w-4 accent-indigo-600"
+                    value="skip"
+                  />
+                  <span className="text-gray-700 dark:text-gray-300">Skip</span>
+                </label>
+                */}
+              </div>
+            </div>
 
             {/* Submit Button */}
             <div className="flex justify-end">
               <button
                 type="submit"
+                data-testid="submit-room"
                 className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+                aria-label="Create Room"
               >
                 Create Room
               </button>

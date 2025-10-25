@@ -113,7 +113,7 @@ class CardGameController extends Controller
         return response()->json(['ok' => true], 200);
     }
 
-    private function buildDeck(): array
+    protected function buildDeck(): array
     {
         $suits = ['♠', '♥', '♦', '♣'];
         $faces = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
@@ -128,7 +128,7 @@ class CardGameController extends Controller
         return $deck;
     }
 
-    private function validateStartConditions(Room $room, int $userId): void
+    protected function validateStartConditions(Room $room, int $userId): void
     {
         if (!$room->players()->whereKey($userId)->exists()) {
             throw new \Exception('You must join this room before starting the game.');
@@ -143,7 +143,7 @@ class CardGameController extends Controller
         }
     }
 
-    private function dealCards(array &$deck, Collection $players, int $cardsPerPlayer): array
+    protected function dealCards(array &$deck, Collection $players, int $cardsPerPlayer): array
     {
         $hands = [];
 
@@ -154,7 +154,7 @@ class CardGameController extends Controller
 
         return $hands;
     }
-    private function initializeGame(CardGame $game, array $hands, array $deck, array $usedCards, int $firstPlayerId): void
+    protected function initializeGame(CardGame $game, array $hands, array $deck, array $usedCards, int $firstPlayerId): void
     {
         $game->fill([
             'deck'            => array_values($deck),
