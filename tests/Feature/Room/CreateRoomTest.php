@@ -7,7 +7,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
-test('user can create a room via form submission', function () {
+test('Autorizēts lietotājs var izveidot spēles istabu un spēles istabas dati tiek saglabāti datubāzē', function () {
     $user = User::factory()->create([
         'email' => 'email-test@example.com',
         'password' => bcrypt('password'),

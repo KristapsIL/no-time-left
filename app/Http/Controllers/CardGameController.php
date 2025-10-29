@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
-use Inertia\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
 
@@ -14,11 +13,7 @@ use App\Models\RoomRules;
 use App\Models\CardGame;
 
 use App\Events\GameStarted;
-use App\Events\CardPlayed;
 use App\Events\HandSynced;
-use App\Events\GameFinished;
-use App\Events\GameReset;
-use Illuminate\Http\JsonResponse;
 
 class CardGameController extends Controller
 {
@@ -94,20 +89,20 @@ class CardGameController extends Controller
     }
 
 
-    public function reset(Request $request, int $roomId): \Illuminate\Http\JsonResponse
+    public function reset( int $roomId): \Illuminate\Http\JsonResponse
     {
         DB::transaction(function () use ($roomId) {
             $game = \App\Models\CardGame::where('room_id', $roomId)->lockForUpdate()->firstOrFail();
 
             $game->player_hands = [];
             $game->used_cards   = [];
-            $game->deck         = [];      // let your start game build a fresh deck
+            $game->deck         = []; 
             $game->current_turn = null;
             $game->winner    = null;
             $game->game_status  = 'waiting';
             $game->save();
 
-            broadcast(new \App\Events\GameReset($roomId)); // to all
+            broadcast(new \App\Events\GameReset($roomId));
         });
 
         return response()->json(['ok' => true], 200);
@@ -167,62 +162,87 @@ class CardGameController extends Controller
     }
     public function startGame(Request $request, int $roomId)
     {
-        try{
+        try {
+            // Iegūst pašreizējā lietotāja ID
             $userId = $request->user()->id;
 
+            
+            // Veic spēles inicializāciju transakcijā, lai nodrošinātu datu konsekvenci,
+            // visas izmaiņas (spēles stāvoklis, kava, spēlētāju rokas) tiek veiktas kopā.
+            // Ja kāda darbība neizdodas, transakcija tiek atcelta, lai izvairītos no nekorektiem datiem.
+
             [$game, $hands, $deck, $usedCards, $players] = DB::transaction(function () use ($roomId, $userId) {
+                // Bloķē istabu un ielādē saistītos datus (spēlētāji, spēle, noteikumi)
                 $room = Room::with(['players', 'game', 'rules'])->lockForUpdate()->findOrFail($roomId);
 
+                // Pārbauda vai spēli drīkst sākt (piemēram, pietiek spēlētāju)
                 $this->validateStartConditions($room, $userId);
 
+                // Izveido jaunu spēles ierakstu, ja tāds neeksistē
                 $game = $room->game ?? new CardGame(['room_id' => $room->id]);
-                $deck =  $this->buildDeck();
+
+                // Izveido un sajauc kāršu kavu
+                $deck = $this->buildDeck();
                 shuffle($deck);
 
+                // Nosaka kāršu skaitu katram spēlētājam (pēc noteikumiem vai noklusējuma)
                 $cardsPerPlayer = $room->rules->cards_per_player ?? 6;
+
+                // Iegūst spēlētājus pievienošanās secībā
                 $players = $room->players()->orderBy('room_user.created_at')->get();
 
+                // Izdala kārtis spēlētājiem
                 $hands = $this->dealCards($deck, $players, $cardsPerPlayer);
 
-                $firstCard  = array_shift($deck);
-                $usedCards  = [$firstCard];
+                // Paņem pirmo kārti uz galda un atzīmē kā izmantotu
+                $firstCard = array_shift($deck);
+                $usedCards = [$firstCard];
 
+                // Nosaka pirmo gājienu pirmajam spēlētājam
                 $firstTurnId = $players->first()->id;
+
+                // Saglabā spēles stāvokli datubāzē (rokas, kava, izmantotās kārtis, gājiena ID)
                 $this->initializeGame($game, $hands, $deck, $usedCards, $firstTurnId);
 
                 return [$game, $hands, $deck, $usedCards, $players];
             });
 
-            $handCounts = collect($hands)->map(fn($h) => count($h))->toArray(); 
-            $deckCount  = count($deck);
-            $turnId     = $game->current_turn;
+            // Sagatavo datus notikumu izsūtīšanai (roku skaits, kavas skaits, pašreizējais gājiens)
+            $handCounts = collect($hands)->map(fn($h) => count($h))->toArray();
+            $deckCount = count($deck);
+            $turnId = $game->current_turn;
 
+            // Paziņo visiem par spēles sākumu
             broadcast(new GameStarted(
-                roomId:       $game->room_id,
-                handCounts:   $handCounts,
-                usedCards:    $usedCards,
+                roomId: $game->room_id,
+                handCounts: $handCounts,
+                usedCards: $usedCards,
                 turnPlayerId: $turnId,
-                deckCount:    $deckCount
+                deckCount: $deckCount
             ));
 
+            // Sinhronizē katra spēlētāja roku individuāli
             foreach ($players as $p) {
                 $pid = (int) $p->id;
                 broadcast(new HandSynced(
-                    roomId:       $game->room_id,
-                    userId:       $pid,
-                    hand:         $hands[(string)$pid] ?? [],
-                    handCounts:   $handCounts,
-                    deckCount:    $deckCount,
-                    usedCards:    $usedCards,
+                    roomId: $game->room_id,
+                    userId: $pid,
+                    hand: $hands[(string)$pid] ?? [],
+                    handCounts: $handCounts,
+                    deckCount: $deckCount,
+                    usedCards: $usedCards,
                     turnPlayerId: $turnId,
                 ));
             }
 
-            return redirect()->back()->with('success', 'Game Started');
+            // Atgriež veiksmīgu paziņojumu
+            return redirect()->back()->with('success', 'Spēle sākta');
         } catch (\Exception $e) {
-        return redirect()->back()->with('error', $e->getMessage());
+            // Kļūdas apstrāde ar ziņojumu
+            return redirect()->back()->with('error', $e->getMessage());
+        }
     }
-    }
+
 
     public function updateDeckState(CardGame $game, array $deck, array $usedCards): void
     {
