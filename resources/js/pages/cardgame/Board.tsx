@@ -300,21 +300,26 @@ const onGameReset = () => {
   }, [room.id]);
 
   // ----- Actions -----
+  
+  // Saglabā pēdējo spēles stāvokli gadījumam, ja servera pieprasījums neizdodas
   const lastSnapshotRef = useRef<GameState | null>(null);
 
   const playCard = useCallback(
     async (card: string) => {
+       // Pārbauda, vai ir spēlētāja gājiens un vai kārts ir derīga
       if (!isMyTurn || !isValidPlay(card, gameRef.current.topCard)) return;
-
-      // Snapshot before optimistic update
+      // Saglabā pašreizējo spēles stāvokli, lai kļūmes gadījumā varētu atjaunot
       lastSnapshotRef.current = gameRef.current;
 
-      // Optimistic remove one card + set top card + adjust my count; do NOT touch deckCount
       const cur = gameRef.current;
       const idx = cur.hand.indexOf(card);
+
+      // Noņem izvēlēto kārti no spēlētāja rokas
       const nextHand = idx >= 0 ? [...cur.hand.slice(0, idx), ...cur.hand.slice(idx + 1)] : cur.hand;
+      // Saglabā iepriekšējo kāršu skaitu spēlētājam
       const myCountBefore = cur.handCounts[uid] ?? cur.hand.length;
 
+      // Optimistiski atjauno spēles stāvokli lokāli (pirms servera apstiprinājuma)
       dispatch({
         type: 'SERVER_SYNC',
         payload: {
@@ -325,9 +330,10 @@ const onGameReset = () => {
       });
 
       try {
+        // Nosūta informāciju serverim par nospēlēto kārti
         await playCardApi(room.id, card);
-        // success: server will broadcast .card-played; nothing else needed
       } catch (err) {
+        // Ja serveris nereaģē, atjauno iepriekšējo spēles stāvokli
         console.error('Failed to play card:', err);
         if (lastSnapshotRef.current) {
           dispatch({ type: 'SERVER_SYNC', payload: lastSnapshotRef.current });
@@ -337,6 +343,7 @@ const onGameReset = () => {
     [isMyTurn, room.id, uid],
     
   );
+
 // Keep a ref to avoid double-click spam
 const pickingUpRef = useRef(false);
 
