@@ -6,6 +6,7 @@ type Room = {
   rules: {
     public: boolean;
     max_players: number;
+    turn_timeout_seconds?: number;
     rules: string[];
   };
   game?: {
@@ -50,6 +51,12 @@ export default function RoomCard({ room, currentUserId }: { room: Room; currentU
         {room.rules.rules.length > 0 && (
           <p className="text-xs text-gray-500 mt-2">
             Rules: {room.rules.rules.join(", ")}
+          </p>
+        )}
+
+        {typeof room.rules.turn_timeout_seconds === 'number' && (
+          <p className="text-xs text-gray-400 mt-1">
+            Turn timeout: {room.rules.turn_timeout_seconds}s
           </p>
         )}
         

@@ -35,7 +35,7 @@ class HandSynced implements ShouldBroadcastNow
     public function broadcastWith(): array
     {
         return [
-            'userId'         => $this->userId,
+            'user_id'        => $this->userId,
             'hand'           => array_values($this->hand),
             'hand_counts'    => $this->handCounts,
             'deck_count'     => $this->deckCount,

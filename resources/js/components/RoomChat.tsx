@@ -28,6 +28,39 @@ const RoomChat: React.FC<RoomChatProps> = ({ roomId, isOpen, onClose }) => {
   useEffect(() => {
     if (!isOpen) return;
 
+    const loadMessages = async () => {
+      try {
+        const response = await fetch(`/rooms/${roomId}/messages`, {
+          headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          console.error('Failed to load chat history');
+          return;
+        }
+
+        const history = await response.json();
+        setMessages(
+          Array.isArray(history)
+            ? history.map((item: any) => ({
+                id: String(item.id),
+                content: item.message,
+                user: item.user,
+                timestamp: item.created_at,
+              }))
+            : [],
+        );
+      } catch (error) {
+        console.error('Error loading chat history:', error);
+      }
+    };
+
+    loadMessages();
+
     // Initialize Pusher
     const pusher = new Pusher(import.meta.env.VITE_PUSHER_APP_KEY, {
       cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER,

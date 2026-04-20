@@ -1,4 +1,3 @@
-
 export type ParsedCard = {
   rank: string;
   suit: '♠' | '♥' | '♦' | '♣';

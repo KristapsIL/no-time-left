@@ -17,28 +17,28 @@ import { TopCard } from '@/components/Board/TopCard';
 import { GameControls } from '@/components/Board/GameControls';
 
 import echo from '@/lib/echo';
-import { isValidPlay } from '@/utils/gameLogic';
-import { playCardApi, pickupCardApi, resyncStateApi, resetGameApi} from '@/utils/api';
+import { isValidPlay, uniqById } from '@/utils/gameLogic';
+import { playCardApi, pickupCardApi, passTurnApi, resyncStateApi, resetGameApi} from '@/utils/api';
+import { getTypedEcho } from '@/types/echo';
+import { useToast } from '@/hooks/useToast';
 
 import { OpponentHandRail } from '@/components/Board/OpponentHandRail';
 import { getSeats } from '@/utils/getSeats';
 
 type PlayerLite = { id: string; name?: string };
 
-
 // ---------- Types ----------
 type Player = { id: number; name?: string };
-
-type RoomRules = {
-  public: boolean;
-  max_players: number;
-  rules: string[];
-};
 
 type Room = {
   id: number;
   code: string;
-  rules: RoomRules;
+  rules: {
+    public: boolean;
+    max_players: number;
+    turn_timeout_seconds?: number;
+    rules: string[];
+  };
   player_hands?: Record<string, string[]>;
   used_cards?: string[];
   game_status?: 'waiting' | 'in_progress' | 'finished';
@@ -73,17 +73,6 @@ type CardPlayedPayload = {
   turn_player_id?: number;
 };
 
-// ---------- Helpers ----------
-function uniqById<T extends { id?: string | number; user_id?: string | number }>(arr: T[]): T[] {
-  const map = new Map<string, T>();
-  for (const item of arr) {
-    const raw = item.id ?? item.user_id;
-    if (raw !== undefined) map.set(String(raw), item);
-  }
-  return [...map.values()];
-}
-
-// ---------- Reducer ----------
 type GameState = {
   hand: string[];
   deckCount: number;
@@ -109,19 +98,11 @@ function gameReducer(state: GameState, action: Action): GameState {
   }
 }
 
-// Echo channel (minimal typing)
-type AnyChannel = {
-  here: (cb: (members: unknown[]) => void) => AnyChannel;
-  joining: (cb: (member: unknown) => void) => AnyChannel;
-  leaving: (cb: (member: unknown) => void) => AnyChannel;
-  listen: (event: string, cb: (payload: unknown) => void) => AnyChannel;
-  stopListening: (event: string) => AnyChannel;
-};
-
 export default function Board() {
   const { props } = usePage<Props>();
   const { room, deck, userId } = props;
   const uid = String(userId);
+  const toast = useToast();
 
   const [game, dispatch] = useReducer(gameReducer, {
     hand: room.player_hands?.[uid] ?? [],
@@ -131,85 +112,113 @@ export default function Board() {
     currentTurn: null,
   });
 
+  const turnTimeoutSeconds = room.rules.turn_timeout_seconds ?? 5;
+  const [turnTimeLeft, setTurnTimeLeft] = useState(turnTimeoutSeconds);
+  const turnExpiredRef = useRef(false);
+
   // Keep a ref to the latest game state for async handlers
   const gameRef = useRef(game);
+  const turnJustStartedRef = useRef(false);
   useEffect(() => {
     gameRef.current = game;
   }, [game]);
+
+  useEffect(() => {
+    setTurnTimeLeft(turnTimeoutSeconds);
+    turnExpiredRef.current = false;
+    turnJustStartedRef.current = true;
+    const cleanup = window.setTimeout(() => {
+      turnJustStartedRef.current = false;
+    }, 0);
+
+    return () => window.clearTimeout(cleanup);
+  }, [game.currentTurn, turnTimeoutSeconds]);
+
+  useEffect(() => {
+    if (game.currentTurn == null || game.status !== 'in_progress') return;
+
+    const timer = window.setInterval(() => {
+      setTurnTimeLeft((current) => Math.max(current - 1, 0));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [game.currentTurn, game.status]);
 
   const [connectedPlayers, setConnectedPlayers] = useState<Player[]>(room.players ?? []);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
   const isMyTurn = useMemo(() => game.currentTurn === userId, [game.currentTurn, userId]);
 
-  // ----- Event handlers (accept unknown, cast inside) -----
+  const passTurn = useCallback(async () => {
+    try {
+      const data = await passTurnApi(room.id);
+      if (typeof data.current_turn === 'number') {
+        dispatch({ type: 'SET_TURN', turn: data.current_turn });
+      }
+    } catch (error) {
+      console.error('pass turn failed', error);
+      toast.error('Unable to pass turn automatically.');
+    }
+  }, [room.id, toast]);
+
+  // ----- Event handlers -----
   const onGameStarted = (raw: unknown) => {
-    const data = raw as GameStartedPayload;
-    const turn = data.turnPlayerId ?? data.turn_player_id ?? null;
-    const deckC = data.deckCount ?? data.deck_count ?? 0;
-    const counts = data.handCounts ?? data.hand_counts ?? {};
-    const used = (data.usedCards ?? data.used_cards) ?? [];
+    const data = raw as any;
 
     dispatch({
       type: 'SERVER_SYNC',
       payload: {
-        deckCount: deckC,
-        handCounts: counts,
-        topCard: used.at(-1) ?? gameRef.current.topCard,
+        deckCount: data.deck_count ?? 0,
+        handCounts: data.hand_counts ?? {},
+        topCard: (data.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
+        status: 'in_progress',
       },
     });
-    dispatch({ type: 'SET_TURN', turn });
+    dispatch({ type: 'SET_TURN', turn: data.turn_player_id ?? null });
     setIsStartingGame(false);
   };
 
   const onCardPlayed = (raw: unknown) => {
-    const data = raw as CardPlayedPayload;
-    const used = (data.usedCards ?? data.used_cards) ?? [];
-    const latestTop = used.length ? used[used.length - 1] : undefined;
-    const counts = data.handCounts ?? data.hand_counts;
-    const deckC = data.deckCount ?? data.deck_count;
-    const turn = data.turnPlayerId ?? data.turn_player_id;
+    const data = raw as any;
+    const used = data.used_cards ?? [];
 
     const patch: Partial<GameState> = {};
-    if (latestTop) patch.topCard = latestTop;
-    if (counts) patch.handCounts = { ...counts };
-    if (typeof deckC === 'number') patch.deckCount = deckC;
+    if (used.length) patch.topCard = used[used.length - 1];
+    if (data.hand_counts) patch.handCounts = data.hand_counts;
+    if (typeof data.deck_count === 'number') patch.deckCount = data.deck_count;
 
     if (Object.keys(patch).length) dispatch({ type: 'SERVER_SYNC', payload: patch });
-    if (typeof turn === 'number') dispatch({ type: 'SET_TURN', turn });
+    if (typeof data.turn_player_id === 'number') dispatch({ type: 'SET_TURN', turn: data.turn_player_id });
   };
 
   const onHandSynced = (raw: unknown) => {
     const d = raw as any;
-    const id = d.userId ?? d.user_id;
-    if (id !== userId) return;
+    if (d.user_id !== userId) return;
 
     startTransition(() => {
       dispatch({
         type: 'SERVER_SYNC',
         payload: {
-          hand: Array.isArray(d.hand) ? d.hand : gameRef.current.hand,
+          hand: d.hand ?? gameRef.current.hand,
           handCounts: d.hand_counts ?? gameRef.current.handCounts,
-          deckCount: typeof d.deck_count === 'number' ? d.deck_count : gameRef.current.deckCount,
+          deckCount: d.deck_count ?? gameRef.current.deckCount,
           topCard: (d.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
         },
       });
-      const turn = d.turnPlayerId ?? d.turn_player_id;
-      if (typeof turn === 'number') dispatch({ type: 'SET_TURN', turn });
+      if (typeof d.turn_player_id === 'number') dispatch({ type: 'SET_TURN', turn: d.turn_player_id });
     });
   }
 
   const onGameFinished = (raw: unknown) => {
     const d = raw as any;
-    const winner = d.winner_id ?? d.winnerId;
-    console.log('Game finished payload:', d);
+    const winner = d.winner_id ?? null;
 
     dispatch({
       type: 'SERVER_SYNC',
       payload: {
         status: 'finished',
-        winnerId: winner ?? null,
-        handCounts: d.hand_counts ?? d.handCounts ?? gameRef.current.handCounts,
+        winnerId: winner,
+        handCounts: d.hand_counts ?? gameRef.current.handCounts,
       },
     });
     dispatch({ type: 'SET_TURN', turn: null });
@@ -232,9 +241,10 @@ const onGameReset = () => {
 
   // ----- Echo subscribe -----
   useEffect(() => {
-    if (!echo) return;
+    const typedEcho = getTypedEcho(echo);
+    if (!typedEcho) return;
 
-    const channel = (echo as any).join?.(`room-${room.id}`) as AnyChannel | undefined;
+    const channel = typedEcho.join(`room-${room.id}`);
     if (!channel) return;
 
     channel.here((members: any[]) => {
@@ -266,7 +276,7 @@ const onGameReset = () => {
         channel.stopListening('.hand-synced');
         channel.stopListening('.game-finished');
         channel.stopListening('.game-reset');
-        (echo as any).leave?.(`room-${room.id}`);
+        typedEcho.leave(`room-${room.id}`);
       } catch (err) {
         console.log(err);
       }
@@ -287,6 +297,7 @@ const onGameReset = () => {
             handCounts: data.hand_counts ?? gameRef.current.handCounts,
             deckCount: typeof data.deck_count === 'number' ? data.deck_count : gameRef.current.deckCount,
             topCard: (data.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
+            status: data.game_status ?? gameRef.current.status,
           },
         });
         dispatch({ type: 'SET_TURN', turn: data.current_turn ?? null });
@@ -333,14 +344,14 @@ const onGameReset = () => {
         // Nosūta informāciju serverim par nospēlēto kārti
         await playCardApi(room.id, card);
       } catch (err) {
-        // Ja serveris nereaģē, atjauno iepriekšējo spēles stāvokli
         console.error('Failed to play card:', err);
         if (lastSnapshotRef.current) {
           dispatch({ type: 'SERVER_SYNC', payload: lastSnapshotRef.current });
         }
+        toast.error((err as Error)?.message ?? 'Failed to play card.');
       }
     },
-    [isMyTurn, room.id, uid],
+    [isMyTurn, room.id, uid, toast],
     
   );
 
@@ -348,78 +359,48 @@ const onGameReset = () => {
 const pickingUpRef = useRef(false);
 
 const pickupCard = useCallback(async () => {
-  if (!isMyTurn || pickingUpRef.current) return;
+  if (!isMyTurn || pickingUpRef.current) return null;
   pickingUpRef.current = true;
 
   try {
     const data = await pickupCardApi(room.id);
 
-    // Case 1: server returns full state (preferred)
-    if (data && Array.isArray(data.hand)) {
-      startTransition(() => {
-        dispatch({
-          type: 'SERVER_SYNC',
-          payload: {
-            hand: data.hand,
-            handCounts: data.hand_counts ?? gameRef.current.handCounts,
-            deckCount:
-              typeof data.deck_count === 'number' ? data.deck_count : gameRef.current.deckCount,
-            topCard: (data.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
-          },
-        });
-      });
-      return;
-    }
-
-    // Case 2: server returns only the card (and maybe counts)
-    if (data && typeof data.card === 'string') {
-      const cur = gameRef.current;
-      startTransition(() => {
-        dispatch({
-          type: 'SERVER_SYNC',
-          payload: {
-            hand: [...cur.hand, data.card],
-            handCounts: data.hand_counts ?? cur.handCounts,
-            deckCount: typeof data.deck_count === 'number' ? data.deck_count : cur.deckCount,
-          },
-        });
-      });
-      return;
-    }
-
-    // Case 3: empty success (204) → resync
-    const fresh = await resyncStateApi(room.id);
     startTransition(() => {
       dispatch({
         type: 'SERVER_SYNC',
         payload: {
-          hand: fresh.hand ?? gameRef.current.hand,
-          handCounts: fresh.hand_counts ?? gameRef.current.handCounts,
-          deckCount:
-            typeof fresh.deck_count === 'number' ? fresh.deck_count : gameRef.current.deckCount,
-          topCard: (fresh.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
+          hand: data.hand ?? gameRef.current.hand,
+          handCounts: data.hand_counts ?? gameRef.current.handCounts,
+          deckCount: typeof data.deck_count === 'number' ? data.deck_count : gameRef.current.deckCount,
+          topCard: (data.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
         },
       });
-      dispatch({ type: 'SET_TURN', turn: fresh.current_turn ?? gameRef.current.currentTurn });
+      if (typeof data.current_turn === 'number') {
+        dispatch({ type: 'SET_TURN', turn: data.current_turn });
+      }
     });
+
+    return data;
   } catch (err) {
     console.error('Failed to pick up card:', err);
-    // No placeholder added → nothing to remove. Optionally show a toast.
+    toast.error((err as Error)?.message ?? 'Failed to pick up card.');
+    return null;
   } finally {
     pickingUpRef.current = false;
   }
-}, [isMyTurn, room.id]);
+}, [isMyTurn, room.id, toast]);
 
   const startGame = useCallback(() => {
     if (isStartingGame) return;
     setIsStartingGame(true);
 
+    const typedEcho = getTypedEcho(echo);
     router.post(
       `/board/${room.id}/start-game`,
       {},
       {
         preserveState: true,
-        headers: { 'X-Socket-Id': (echo as any)?.socketId?.() ?? '' },
+        headers: { 'X-Socket-Id': typedEcho?.socketId() ?? '' },
         onError: () => setIsStartingGame(false),
         onFinish: () => setTimeout(() => setIsStartingGame(false), 2500),
       },
@@ -433,25 +414,48 @@ const pickupCard = useCallback(async () => {
    
 
 const canPlayCard = useCallback(
-  (card: string) => isMyTurn && isValidPlay(card, gameRef.current.topCard),
-  [isMyTurn]
+  (card: string) =>
+    isMyTurn &&
+    !turnExpiredRef.current &&
+    turnTimeLeft > 0 &&
+    isValidPlay(card, gameRef.current.topCard),
+  [isMyTurn, turnTimeLeft]
 );
 
-// Guarded play: ignore clicks when not my turn or invalid
+// Guarded play: ignore clicks when not my turn, invalid, or turn has expired
 const onPlay = useCallback(
   (card: string) => {
     if (!canPlayCard(card)) return;
-    // call your existing playCard (which still double-checks)
     playCard(card);
   },
   [canPlayCard, playCard]
 );
 
-// Guarded pickup: ignore clicks when not my turn
+// Guarded pickup: ignore clicks when not my turn or turn has already expired
 const onPickup = useCallback(() => {
-  if (!isMyTurn) return;
+  if (!isMyTurn || turnExpiredRef.current || turnTimeLeft <= 0) return;
   pickupCard();
-}, [isMyTurn, pickupCard]);
+}, [isMyTurn, pickupCard, turnTimeLeft]);
+
+const handleTurnExpiry = useCallback(async () => {
+  try {
+    const data = await pickupCard();
+    if (data && data.current_turn === userId) {
+      await passTurn();
+    }
+  } catch (err) {
+    console.error('Turn expiry handling failed:', err);
+  }
+}, [pickupCard, passTurn, userId]);
+
+useEffect(() => {
+  if (turnTimeLeft !== 0 || !isMyTurn || game.status !== 'in_progress') return;
+  if (turnExpiredRef.current || turnJustStartedRef.current) return;
+
+  turnExpiredRef.current = true;
+  toast.error('Time is up! Your turn has ended.');
+  handleTurnExpiry();
+}, [turnTimeLeft, isMyTurn, game.status, handleTurnExpiry, toast]);
 
 const playAgain = useCallback(async () => {
   try {
@@ -602,16 +606,21 @@ const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
         <div className="row-start-3 md:row-start-2 col-start-1 md:col-start-2 min-w-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-6">
             <div className="flex gap-12 items-center justify-center flex-wrap">
-              <Deck isMyTurn={isMyTurn} pickupCard={onPickup} />
+              <Deck isMyTurn={isMyTurn && !turnExpiredRef.current && turnTimeLeft > 0} pickupCard={onPickup} />
               <TopCard topCard={game.topCard} />
             </div>
 
             {game.currentTurn != null && (
-              <div className="text-xs opacity-80">
-                Turn:{' '}
-                <span className="font-semibold">
-                  {game.currentTurn === userId ? 'You' : `Player ${game.currentTurn}`}
-                </span>
+              <div className="text-xs opacity-80 space-y-1 text-center">
+                <div>
+                  Turn:{' '}
+                  <span className="font-semibold">
+                    {game.currentTurn === userId ? 'You' : `Player ${game.currentTurn}`}
+                  </span>
+                </div>
+                <div className="text-sm text-indigo-600 dark:text-indigo-300">
+                  {game.currentTurn === userId ? 'Your turn' : 'Time remaining'}: {turnTimeLeft}s
+                </div>
               </div>
             )}
           </div>

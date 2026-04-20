@@ -6,6 +6,7 @@ export default function CreateRoom() {
   const [Name, setName] = useState<string>('');
   const [isPublic, setIsPublic] = useState(true);
   const [maxPlayers, setMaxPlayers] = useState(2);
+  const [turnTimeout, setTurnTimeout] = useState(5);
   const [rules, setRules] = useState<string[]>([]);
 
   const handleRuleChange = (rule: string) => {
@@ -20,6 +21,7 @@ export default function CreateRoom() {
       room_name: Name,
       public: isPublic,
       max_players: maxPlayers,
+      turn_timeout_seconds: turnTimeout,
       rules: rules,
     });
   };
@@ -110,6 +112,29 @@ export default function CreateRoom() {
                 <option value={3}>3 Players</option>
                 <option value={4}>4 Players</option>
               </select>
+            </div>
+
+            <div>
+              <label
+                htmlFor="turn_timeout_seconds"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
+                Turn timeout (seconds)
+              </label>
+              <input
+                id="turn_timeout_seconds"
+                name="turn_timeout_seconds"
+                type="number"
+                min={2}
+                max={60}
+                value={turnTimeout}
+                onChange={(e) => setTurnTimeout(Number(e.target.value))}
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-gray-800 dark:text-gray-100 dark:bg-neutral-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+                aria-describedby="turn_timeout_help"
+              />
+              <p id="turn_timeout_help" className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Number of seconds each player has for their turn. Defaults to 5 seconds.
+              </p>
             </div>
 
             {/* Rules */}

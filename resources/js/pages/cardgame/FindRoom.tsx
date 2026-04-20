@@ -10,6 +10,7 @@ type Room = {
     rules: {
         public: boolean;
         max_players: number;
+        turn_timeout_seconds?: number;
         rules: string[];
     };
     game?: {

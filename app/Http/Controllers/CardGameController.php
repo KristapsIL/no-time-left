@@ -69,26 +69,6 @@ class CardGameController extends Controller
     }
 
 
-    public function shuffle(int $roomId): RedirectResponse
-    {
-        $room = Room::with('game')->findOrFail($roomId);
-        $game = $room->game;
-
-        if (!$game) {
-            return back()->with('error', 'Game not initialized for this room.');
-        }
-
-        $deck = $game->deck ?? [];
-
-        shuffle($deck);
-
-        $game->deck = $deck;
-        $game->save();
-
-        return back();
-    }
-
-
     public function reset( int $roomId): \Illuminate\Http\JsonResponse
     {
         DB::transaction(function () use ($roomId) {
@@ -243,15 +223,6 @@ class CardGameController extends Controller
         }
     }
 
-
-    public function updateDeckState(CardGame $game, array $deck, array $usedCards): void
-    {
-        $game->update([
-            'deck'       => array_values($deck),
-            'used_cards' => array_values($usedCards),
-        ]);
-    }
-
     public function playCard(Request $request, int $roomId)
     {
         $request->validate([
@@ -370,7 +341,14 @@ class CardGameController extends Controller
             usedCards: $usedCards
         ))->toOthers();
 
-        return redirect()->back()->with('success', 'Card played!');
+        return response()->json([
+            'hand'         => $hand,
+            'hand_counts'  => $handCounts,
+            'deck_count'   => $deckCount,
+            'used_cards'   => $usedCards,
+            'current_turn' => $nextTurn,
+            'game_status'  => $finished ? 'finished' : 'in_progress',
+        ], 200);
 
     }
 
@@ -507,14 +485,67 @@ class CardGameController extends Controller
         ))->toOthers();
 
         return response()->json([
-            'hand'        => $hand,
-            'hand_counts' => $handCounts,
-            'deck_count'  => $deckCount,
-            'used_cards'  => $game->used_cards ?? [],
-            'drawn_card'  => $drawnCard,
+            'hand'         => $hand,
+            'hand_counts'  => $handCounts,
+            'deck_count'   => $deckCount,
+            'used_cards'   => $game->used_cards ?? [],
+            'current_turn' => $game->current_turn,
+            'game_status'  => $game->game_status ?? 'in_progress',
         ], 200);
     }
 
+    public function passTurn(Request $request, int $roomId)
+    {
+        $userId = (int) $request->user()->id;
+
+        [$game, $handCounts, $deckCount] = DB::transaction(function () use ($roomId, $userId) {
+            $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
+            $game = $room->game;
+
+            if (!$game || $userId !== (int) $game->current_turn) {
+                abort(422, 'Not your turn or game not initialized.');
+            }
+
+            $playerIds = $room->players()
+                ->orderBy('room_user.created_at')
+                ->pluck('users.id')
+                ->toArray();
+
+            $currentIndex = array_search((int) $game->current_turn, $playerIds, true);
+            if ($currentIndex === false) {
+                $currentIndex = -1;
+            }
+
+            $nextIndex = ($currentIndex + 1) % max(count($playerIds), 1);
+            $game->current_turn  = $playerIds[$nextIndex] ?? null;
+            $game->has_picked_up = false;
+            $game->save();
+
+            $hands = $game->player_hands ?? [];
+            $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
+            $deckCount  = count($game->deck ?? []);
+
+            return [$game, $handCounts, $deckCount];
+        });
+
+        broadcast(new \App\Events\CardPlayed(
+            roomId:       $game->room_id,
+            userId:       $userId,
+            card:         '',
+            handCounts:   $handCounts,
+            deckCount:    $deckCount,
+            turnPlayerId: $game->current_turn,
+            usedCards:    $game->used_cards ?? [],
+        ))->toOthers();
+
+        return response()->json([
+            'hand_counts'  => $handCounts,
+            'deck_count'   => $deckCount,
+            'used_cards'   => $game->used_cards ?? [],
+            'current_turn' => $game->current_turn,
+            'game_status'  => $game->game_status ?? 'in_progress',
+        ], 200);
+    }
 
     public function resyncState(Request $request, int $roomId)
     {

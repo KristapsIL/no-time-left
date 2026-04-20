@@ -19,10 +19,11 @@ class RoomController extends Controller
     {
         //Validē ievadītos datus no formas
         $validated = $request->validate([
-            'room_name'    => ['required', 'min:3', 'max:255'],
-            'public'       => ['required', 'boolean'],
-            'max_players'  => ['required', 'integer', 'min:2', 'max:4'],
-            'rules'        => ['nullable', 'array'],
+            'room_name'             => ['required', 'min:3', 'max:255'],
+            'public'                => ['required', 'boolean'],
+            'max_players'           => ['required', 'integer', 'min:2', 'max:4'],
+            'turn_timeout_seconds'  => ['required', 'integer', 'min:2', 'max:60'],
+            'rules'                 => ['nullable', 'array'],
         ]);
          //Veic visu datubāzes darbību vienā transakcijā, lai kļūdas gadījumā nekas netiktu saglabāts daļēji
         return DB::transaction(function () use ($request, $validated) {
@@ -34,10 +35,11 @@ class RoomController extends Controller
             ]);
              //Izveido šai istabai atbilstošus noteikumus
             RoomRules::create([
-                'room_id'     => $room->id,
-                'public'      => $validated['public'],
-                'max_players' => $validated['max_players'],
-                'rules'       => $validated['rules'] ?? [],
+                'room_id'             => $room->id,
+                'public'              => $validated['public'],
+                'max_players'         => $validated['max_players'],
+                'turn_timeout_seconds'=> $validated['turn_timeout_seconds'],
+                'rules'               => $validated['rules'] ?? [],
             ]);
 
             //Pēc veiksmīgas izveides pāradresē lietotāju uz spēles galda lapu
