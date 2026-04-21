@@ -48,6 +48,12 @@ type Room = {
 type Props = {
   room: Room;
   deck: string[];
+  usedCards?: string[];
+  handCounts?: Record<string, number>;
+  myHand?: string[];
+  gameStatus?: 'waiting' | 'in_progress' | 'finished';
+  currentTurn?: number | null;
+  winnerId?: number | null;
   userId: number;
 };
 
@@ -71,6 +77,32 @@ type CardPlayedPayload = {
   hand_counts?: Record<string, number>;
   deck_count?: number;
   turn_player_id?: number;
+};
+
+type PresenceMember = {
+  id: number;
+  name?: string;
+};
+
+type HandSyncedPayload = {
+  user_id?: number;
+  userId?: number;
+  hand?: string[];
+  handCounts?: Record<string, number>;
+  hand_counts?: Record<string, number>;
+  deckCount?: number;
+  deck_count?: number;
+  usedCards?: string[];
+  used_cards?: string[];
+  turnPlayerId?: number | null;
+  turn_player_id?: number | null;
+};
+
+type GameFinishedPayload = {
+  winnerId?: number | null;
+  winner_id?: number | null;
+  handCounts?: Record<string, number>;
+  hand_counts?: Record<string, number>;
 };
 
 type GameState = {
@@ -100,16 +132,18 @@ function gameReducer(state: GameState, action: Action): GameState {
 
 export default function Board() {
   const { props } = usePage<Props>();
-  const { room, deck, userId } = props;
+  const { room, deck, usedCards, handCounts, myHand, gameStatus, currentTurn, winnerId, userId } = props;
   const uid = String(userId);
   const toast = useToast();
 
   const [game, dispatch] = useReducer(gameReducer, {
-    hand: room.player_hands?.[uid] ?? [],
+    hand: myHand ?? [],
     deckCount: deck?.length ?? 0,
-    topCard: room.used_cards?.at(-1) ?? null,
-    handCounts: {},
-    currentTurn: null,
+    topCard: usedCards?.at(-1) ?? null,
+    handCounts: handCounts ?? {},
+    currentTurn: currentTurn ?? null,
+    status: gameStatus ?? 'waiting',
+    winnerId: winnerId ?? null,
   });
 
   const turnTimeoutSeconds = room.rules.turn_timeout_seconds ?? 5;
@@ -163,62 +197,104 @@ export default function Board() {
 
   // ----- Event handlers -----
   const onGameStarted = (raw: unknown) => {
-    const data = raw as any;
+    const data = raw as GameStartedPayload;
+    const eventHandCounts = data.hand_counts ?? data.handCounts ?? {};
+    const eventUsedCards = data.used_cards ?? data.usedCards ?? [];
+    const eventTurn =
+      typeof data.turn_player_id === 'number'
+        ? data.turn_player_id
+        : typeof data.turnPlayerId === 'number'
+          ? data.turnPlayerId
+          : null;
 
     dispatch({
       type: 'SERVER_SYNC',
       payload: {
-        deckCount: data.deck_count ?? 0,
-        handCounts: data.hand_counts ?? {},
-        topCard: (data.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
+        deckCount: data.deck_count ?? data.deckCount ?? 0,
+        handCounts: eventHandCounts,
+        topCard: eventUsedCards.at(-1) ?? gameRef.current.topCard,
         status: 'in_progress',
       },
     });
-    dispatch({ type: 'SET_TURN', turn: data.turn_player_id ?? null });
+    dispatch({ type: 'SET_TURN', turn: eventTurn });
     setIsStartingGame(false);
   };
 
   const onCardPlayed = (raw: unknown) => {
-    const data = raw as any;
-    const used = data.used_cards ?? [];
+    const data = raw as CardPlayedPayload;
+    const used = data.used_cards ?? data.usedCards ?? [];
+    const eventHandCounts = data.hand_counts ?? data.handCounts;
+    const eventDeckCount =
+      typeof data.deck_count === 'number'
+        ? data.deck_count
+        : typeof data.deckCount === 'number'
+          ? data.deckCount
+          : undefined;
+    const eventTurn =
+      typeof data.turn_player_id === 'number'
+        ? data.turn_player_id
+        : typeof data.turnPlayerId === 'number'
+          ? data.turnPlayerId
+          : null;
 
     const patch: Partial<GameState> = {};
     if (used.length) patch.topCard = used[used.length - 1];
-    if (data.hand_counts) patch.handCounts = data.hand_counts;
-    if (typeof data.deck_count === 'number') patch.deckCount = data.deck_count;
+    if (eventHandCounts) patch.handCounts = eventHandCounts;
+    if (typeof eventDeckCount === 'number') patch.deckCount = eventDeckCount;
 
     if (Object.keys(patch).length) dispatch({ type: 'SERVER_SYNC', payload: patch });
-    if (typeof data.turn_player_id === 'number') dispatch({ type: 'SET_TURN', turn: data.turn_player_id });
+    if (eventTurn !== null) dispatch({ type: 'SET_TURN', turn: eventTurn });
   };
 
   const onHandSynced = (raw: unknown) => {
-    const d = raw as any;
-    if (d.user_id !== userId) return;
+    const d = raw as HandSyncedPayload;
+    const syncedUserId = d.user_id ?? d.userId;
+    if (syncedUserId !== userId) return;
+    const eventHandCounts = d.hand_counts ?? d.handCounts;
+    const eventUsedCards = d.used_cards ?? d.usedCards;
+    const eventDeckCount =
+      typeof d.deck_count === 'number'
+        ? d.deck_count
+        : typeof d.deckCount === 'number'
+          ? d.deckCount
+          : gameRef.current.deckCount;
+    const eventTurn =
+      typeof d.turn_player_id === 'number'
+        ? d.turn_player_id
+        : typeof d.turnPlayerId === 'number'
+          ? d.turnPlayerId
+          : null;
 
     startTransition(() => {
       dispatch({
         type: 'SERVER_SYNC',
         payload: {
           hand: d.hand ?? gameRef.current.hand,
-          handCounts: d.hand_counts ?? gameRef.current.handCounts,
-          deckCount: d.deck_count ?? gameRef.current.deckCount,
-          topCard: (d.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
+          handCounts: eventHandCounts ?? gameRef.current.handCounts,
+          deckCount: eventDeckCount,
+          topCard: (eventUsedCards ?? []).at(-1) ?? gameRef.current.topCard,
         },
       });
-      if (typeof d.turn_player_id === 'number') dispatch({ type: 'SET_TURN', turn: d.turn_player_id });
+      if (eventTurn !== null) dispatch({ type: 'SET_TURN', turn: eventTurn });
     });
   }
 
   const onGameFinished = (raw: unknown) => {
-    const d = raw as any;
-    const winner = d.winner_id ?? null;
+    const d = raw as GameFinishedPayload;
+    const winner =
+      typeof d.winner_id === 'number'
+        ? d.winner_id
+        : typeof d.winnerId === 'number'
+          ? d.winnerId
+          : null;
+    const eventHandCounts = d.hand_counts ?? d.handCounts;
 
     dispatch({
       type: 'SERVER_SYNC',
       payload: {
         status: 'finished',
         winnerId: winner,
-        handCounts: d.hand_counts ?? gameRef.current.handCounts,
+        handCounts: eventHandCounts ?? gameRef.current.handCounts,
       },
     });
     dispatch({ type: 'SET_TURN', turn: null });
@@ -247,7 +323,7 @@ const onGameReset = () => {
     const channel = typedEcho.join(`room-${room.id}`);
     if (!channel) return;
 
-    channel.here((members: any[]) => {
+    channel.here((members: PresenceMember[]) => {
       const players: Player[] = (members ?? []).map((m) => ({
         id: m.id,
         name: m.name ?? `Player ${m.id}`,
@@ -255,12 +331,12 @@ const onGameReset = () => {
       setConnectedPlayers(uniqById(players));
     });
 
-    channel.joining((member: any) => {
+    channel.joining((member: PresenceMember) => {
       const player: Player = { id: member.id, name: member.name ?? `Player ${member.id}` };
       setConnectedPlayers((prev) => uniqById([...(prev ?? []), player]));
     });
 
-    channel.leaving((member: any) => {
+    channel.leaving((member: PresenceMember) => {
       setConnectedPlayers((prev) => (prev ?? []).filter((p) => p.id !== member.id));
     });
 
@@ -408,9 +484,8 @@ const pickupCard = useCallback(async () => {
   }, [isStartingGame, room.id]);
 
   const leaveGame = useCallback(() => {
-    console.log('Leaving...');
-    router.visit('/findRoom');
-  }, []);
+    router.delete(`/leaveroom/${room.id}`);
+  }, [room.id]);
    
 
 const canPlayCard = useCallback(
@@ -658,7 +733,7 @@ const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
           <div className="w-full max-w-5xl">
             <GameControls
               roomId={room.id}
-              isStartingGame={false}
+              isStartingGame={isStartingGame}
               connectedPlayers={connectedPlayers}
               isChatOpen={isChatOpen}
               toggleChat={() => setIsChatOpen((open) => !open)}

@@ -21,10 +21,6 @@ class CardGame extends Model
         return $this->belongsTo(Room::class);
     }
 
-    public function canStartGame(){
-        return $this->game && $this->game->game_status === 'waiting' && $this->players()->count() >= 2;
-    }
-
     public function currentPlayer(){
         return $this->belongsTo(User::class, 'current_turn');
     }

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
@@ -17,6 +16,13 @@ use App\Events\HandSynced;
 
 class CardGameController extends Controller
 {
+    protected function ensureRoomMembership(Room $room, int $userId): void
+    {
+        if (!$room->players()->where('users.id', $userId)->exists()) {
+            abort(403, 'You must join this room first.');
+        }
+    }
+
     public function board(Request $request, int $roomId)
     {
         $user = $request->user();
@@ -52,27 +58,38 @@ class CardGameController extends Controller
         });
 
         $playerHands = $game->player_hands ?? [];
-        $myHand      = $playerHands[$user->id] ?? [];
-        $handCounts  = collect($playerHands)->map(fn ($cards) => is_array($cards) ? count($cards) : 0);
+        $myHand      = $playerHands[(string) $user->id] ?? [];
+        $handCounts  = collect($playerHands)->map(fn ($cards) => is_array($cards) ? count($cards) : 0)->toArray();
 
         $roomArray = $room->toArray();
         $roomArray['code'] = $room->room_code; 
 
         return Inertia::render('cardgame/Board', [
-            'room'       => $roomArray,                 
-            'deck'       => $game->deck ?? [],
-            'usedCards'  => $game->used_cards ?? [],
-            'handCounts' => $handCounts,                
-            'myHand'     => array_values($myHand),     
-            'userId'     => $user->id,
+            'room'        => $roomArray,
+            'deck'        => array_values($game->deck ?? []),
+            'usedCards'   => array_values($game->used_cards ?? []),
+            'handCounts'  => $handCounts,
+            'myHand'      => array_values($myHand),
+            'gameStatus'  => $game->game_status,
+            'currentTurn' => $game->current_turn,
+            'winnerId'    => $game->winner,
+            'userId'      => $user->id,
         ]);
     }
 
 
-    public function reset( int $roomId): \Illuminate\Http\JsonResponse
+    public function reset(Request $request, int $roomId): \Illuminate\Http\JsonResponse
     {
-        DB::transaction(function () use ($roomId) {
-            $game = \App\Models\CardGame::where('room_id', $roomId)->lockForUpdate()->firstOrFail();
+        $userId = (int) $request->user()->id;
+
+        DB::transaction(function () use ($roomId, $userId) {
+            $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
+            $this->ensureRoomMembership($room, $userId);
+
+            $game = $room->game;
+            if (!$game) {
+                abort(422, 'Game not initialized.');
+            }
 
             $game->player_hands = [];
             $game->used_cards   = [];
@@ -245,6 +262,8 @@ class CardGameController extends Controller
             $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
             $game = $room->game;
 
+            $this->ensureRoomMembership($room, $userId);
+
             if (!$game || $userId !== (int) $game->current_turn) {
                 abort(422, 'Not your turn or game not initialized.');
             }
@@ -398,6 +417,8 @@ class CardGameController extends Controller
             $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
             $game = $room->game;
 
+            $this->ensureRoomMembership($room, $userId);
+
             if (!$game || $userId !== (int) $game->current_turn) {
                 abort(422, 'Not your turn or game not initialized.');
             }
@@ -502,6 +523,8 @@ class CardGameController extends Controller
             $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
             $game = $room->game;
 
+            $this->ensureRoomMembership($room, $userId);
+
             if (!$game || $userId !== (int) $game->current_turn) {
                 abort(422, 'Not your turn or game not initialized.');
             }
@@ -554,9 +577,7 @@ class CardGameController extends Controller
         $room = Room::with(['players', 'game'])->findOrFail($roomId);
         $game = $room->game;
 
-        if (!$room->players()->where('users.id', $userId)->exists()) {
-            abort(403, 'You must join this room first.');
-        }
+        $this->ensureRoomMembership($room, $userId);
 
         if (!$game) {
             abort(422, 'Game not initialized.');

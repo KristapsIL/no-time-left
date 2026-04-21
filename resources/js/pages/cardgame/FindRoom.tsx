@@ -45,7 +45,7 @@ export default function FindRoom({ rooms, auth }: Props) {
                             <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No rooms available</h3>
                             <p className="text-gray-600 dark:text-gray-300 mb-6">Be the first to create a game room!</p>
                             <button 
-                                onClick={() => router.visit('/cardgame/create-room')}
+                                onClick={() => router.visit('/createRoom')}
                                 className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
                             >
                                 Create Room

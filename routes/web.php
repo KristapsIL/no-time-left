@@ -10,12 +10,6 @@ Route::get('/', function () {
     return Inertia::render('welcome');
 })->name('home');
 
-// Test event trigger (for development/testing)
-Route::get('/trigger-event', function() {
-    broadcast(new \App\Events\MyEvent("Hello from Laravel!"));
-    return "Event sent!";
-});
-
 Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/dashboard', function () {
@@ -23,24 +17,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('dashboard');
 
     Route::get('/board/{roomId}', [CardGameController::class, 'board'])->name('board');
-    Route::post('/board/{roomId}/shuffle', [CardGameController::class, 'shuffle'])->name('board.shuffle');
     Route::post('/board/{roomId}/reset', [CardGameController::class, 'reset'])->name('board.reset');
     Route::match(['get', 'post'], '/board/{roomId}/start-game', [CardGameController::class, 'startGame'] )->name('startGame');
     Route::post('/board/{roomId}/play-card', [CardGameController::class, 'playCard']);
     Route::post('/board/{roomId}/pickup', [CardGameController::class, 'pickUpCard']);
     Route::post('/board/{roomId}/pass-turn', [CardGameController::class, 'passTurn']);
-    Route::get('/board/{room}/resync-state', [CardGameController::class, 'resyncState']);
-    Route::get('/board/{userId}/game-finish', [CardGameController::class, 'finishGame']);
+    Route::get('/board/{roomId}/resync-state', [CardGameController::class, 'resyncState']);
 
     Route::get('/createRoom', [RoomController::class, 'createRoom'])->name('createRoom');
     Route::post('/storeRules', [RoomController::class, 'store'])->name('storeRules');
     Route::get('/findRoom', [RoomController::class, 'findRoom'])->name('findRoom');
     Route::get('/joinroom/{roomId}', [RoomController::class, 'joinRoom'])->name('joinRoom');
     Route::delete('/leaveroom/{roomId}', [RoomController::class, 'leaveRoom'])->name('leaveRoom');
-    Route::get('/rooms/{room}/resync-hand', [RoomController::class, 'resyncHand']);
-    Route::delete('/deleteRoom', [RoomController::class, 'deleteRoom'])->name('deleteRoom');
-    
-    Route::get('/test-event', [RoomController::class, 'test'])->name('test-event');
     
     Route::post('/send-message', function(\Illuminate\Http\Request $request) {
         $request->validate([

@@ -16,7 +16,7 @@ class CardPlayed implements ShouldBroadcastNow
     public string $card;
     public array $usedCards;
     public array $handCounts;   // NEW
-    public int $turnPlayerId;   // NEW
+    public ?int $turnPlayerId;   // NEW
     public int $deckCount;      // NEW
 
     public function __construct(
@@ -25,7 +25,7 @@ class CardPlayed implements ShouldBroadcastNow
         string $card,
         array $usedCards,
         array $handCounts,
-        int $turnPlayerId,
+        ?int $turnPlayerId,
         int $deckCount
     ) {
         $this->roomId = $roomId;

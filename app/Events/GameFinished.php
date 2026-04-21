@@ -2,8 +2,6 @@
 
 namespace App\Events;
 
-namespace App\Events;
-
 use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 

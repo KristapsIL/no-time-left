@@ -22,7 +22,7 @@ class RoomController extends Controller
             'room_name'             => ['required', 'min:3', 'max:255'],
             'public'                => ['required', 'boolean'],
             'max_players'           => ['required', 'integer', 'min:2', 'max:4'],
-            'turn_timeout_seconds'  => ['required', 'integer', 'min:2', 'max:60'],
+            'turn_timeout_seconds'  => ['nullable', 'integer', 'min:2', 'max:60'],
             'rules'                 => ['nullable', 'array'],
         ]);
          //Veic visu datubāzes darbību vienā transakcijā, lai kļūdas gadījumā nekas netiktu saglabāts daļēji
@@ -38,9 +38,18 @@ class RoomController extends Controller
                 'room_id'             => $room->id,
                 'public'              => $validated['public'],
                 'max_players'         => $validated['max_players'],
-                'turn_timeout_seconds'=> $validated['turn_timeout_seconds'],
+                'turn_timeout_seconds'=> $validated['turn_timeout_seconds'] ?? 5,
                 'rules'               => $validated['rules'] ?? [],
             ]);
+
+            DB::table('room_user')->updateOrInsert(
+                ['user_id' => $request->user()->id],
+                [
+                    'room_id'    => $room->id,
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ]
+            );
 
             //Pēc veiksmīgas izveides pāradresē lietotāju uz spēles galda lapu
             return redirect()->route('board', ['roomId' => $room->id]);
@@ -102,7 +111,7 @@ class RoomController extends Controller
             [
                 'room_id'    => $roomId,
                 'updated_at' => now(),
-                'created_at' => now(), 
+                'created_at' => now(),
             ]
         );
 
@@ -115,10 +124,5 @@ class RoomController extends Controller
     {
         $request->user()->rooms()->detach($roomId);
         return redirect()->route('findRoom');
-    }
-    public function deleteRoom($roomId){
-        $room = Room::findOrFail($roomId);
-        $room->delete();
-        return back();
     }
 }
