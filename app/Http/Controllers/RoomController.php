@@ -112,7 +112,9 @@ class RoomController extends Controller
      */
     public function findRoom(){
         // Iegūstam visas istabas ar noteikumiem, spēli un spēlētājiem
-        $rooms = Room::with(['rules', 'game', 'players'])->get();
+        $rooms = Room::with(['rules', 'game', 'players'])
+            ->where('room_name', 'not like', 'AI Duel %')
+            ->get();
         // Ar Inertia palīdzību nosūtām datus uz React komponenti "FindRoom"
         return Inertia::render('cardgame/FindRoom', ['rooms' => $rooms]);
     }

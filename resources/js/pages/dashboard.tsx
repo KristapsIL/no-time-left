@@ -20,14 +20,15 @@ export default function Dashboard() {
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title="No Time Left" />
+      <Head title="Home" />
       <div className="min-h-[100dvh] p-4 md:p-6">
         <div className="max-w-6xl mx-auto">
           {/* Hero Section */}
           <div className="text-center mb-10">
             <div className="relative">
+              <p className="text-xs uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400 mb-3">No Time Left</p>
               <h1 className="text-5xl md:text-7xl font-bold text-zinc-900 dark:text-zinc-100 mb-4 tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-                NO TIME LEFT
+                HOME
               </h1>
               <div className="flex justify-center gap-2 mb-6">
                 {playingCards.map((suit, i) => (
@@ -42,7 +43,7 @@ export default function Dashboard() {
                 ))}
               </div>
               <p className="text-base md:text-lg text-zinc-600 dark:text-zinc-300 max-w-2xl mx-auto leading-relaxed">
-                Build a room, set your bot difficulty, and race cards to zero under turn pressure.
+                Your main hub for creating rooms, finding matches, and starting fast AI rounds.
               </p>
             </div>
           </div>

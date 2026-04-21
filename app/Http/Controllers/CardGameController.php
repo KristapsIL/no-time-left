@@ -753,6 +753,19 @@ class CardGameController extends Controller
             $this->checkDeckAndReshuffle($deck, $game);
 
             if (count($deck) === 0) {
+                $usedCards = $game->used_cards ?? [];
+                $topCard   = !empty($usedCards) ? $usedCards[array_key_last($usedCards)] : null;
+                $canPlayCurrentHand = $topCard
+                    ? collect($playerHand)->contains(fn ($c) => $this->isValidPlay((string) $c, (string) $topCard))
+                    : !empty($playerHand);
+
+                if (!$canPlayCurrentHand) {
+                    $nextTurn = $this->nextPlayerId($room, (int) $game->current_turn);
+                    $game->current_turn = $nextTurn;
+                    $game->has_picked_up = false;
+                    $game->save();
+                }
+
                 $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
                 return [$game, $playerHand, $handCounts, 0, null];
             }
@@ -779,7 +792,18 @@ class CardGameController extends Controller
 
                 } while ($matchRuleExists && !$this->isValidPlay($drawn, $topCard));
 
-                $game->has_picked_up = true;
+                $canPlayAfterPickup = $topCard
+                    ? collect($playerHand)->contains(fn ($c) => $this->isValidPlay((string) $c, (string) $topCard))
+                    : !empty($playerHand);
+
+                if ($canPlayAfterPickup) {
+                    $game->has_picked_up = true;
+                } else {
+                    $nextTurn = $this->nextPlayerId($room, (int) $game->current_turn);
+                    $game->current_turn = $nextTurn;
+                    $game->has_picked_up = false;
+                }
+
                 $game->save();
 
             } else {

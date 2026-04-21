@@ -41,7 +41,7 @@ export const GameControls: React.FC<Props> = ({
       {/* Dropdown panel (opens UP) */}
       {open && (
         <div
-          className="absolute bottom-full right-0 mb-2 w-56 bg-white dark:bg-neutral-900 shadow-lg rounded-xl border border-neutral-200 dark:border-neutral-700 z-50 overflow-hidden"
+          className="absolute bottom-full left-0 mb-2 w-56 bg-white dark:bg-neutral-900 shadow-lg rounded-xl border border-neutral-200 dark:border-neutral-700 z-50 overflow-hidden"
         >
           <ul className="flex flex-col text-sm text-zinc-900 dark:text-zinc-100">
             <li>

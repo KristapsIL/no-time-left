@@ -15,6 +15,7 @@ import { PlayerHand } from '@/components/Board/PlayerHand';
 import { Deck } from '@/components/Board/Deck';
 import { TopCard } from '@/components/Board/TopCard';
 import { GameControls } from '@/components/Board/GameControls';
+import { CardView } from '@/components/Board/CardView';
 
 import echo from '@/lib/echo';
 import { isValidPlay, uniqById } from '@/utils/gameLogic';
@@ -70,6 +71,8 @@ type GameStartedPayload = {
 };
 
 type CardPlayedPayload = {
+  player_id?: number;
+  card?: string;
   usedCards?: string[];
   handCounts?: Record<string, number>;
   deckCount?: number;
@@ -131,6 +134,37 @@ function gameReducer(state: GameState, action: Action): GameState {
   }
 }
 
+const parseCard = (card: string): { value: string; suit: string } => {
+  const [value = '', suit = ''] = card.split('-');
+  return { value, suit };
+};
+
+const cardColor = (suit: string) => (suit === '♥' || suit === '♦' ? 'text-rose-600' : 'text-zinc-900');
+
+type FlyingCard = {
+  card: string;
+  from: 'player' | 'bot' | 'peer';
+};
+
+const getAddedCards = (previousHand: string[], nextHand: string[]): string[] => {
+  const counts = new Map<string, number>();
+  for (const card of previousHand) {
+    counts.set(card, (counts.get(card) ?? 0) + 1);
+  }
+
+  const added: string[] = [];
+  for (const card of nextHand) {
+    const current = counts.get(card) ?? 0;
+    if (current > 0) {
+      counts.set(card, current - 1);
+    } else {
+      added.push(card);
+    }
+  }
+
+  return added;
+};
+
 export default function Board() {
   const { props } = usePage<Props>();
   const { room, deck, usedCards, handCounts, myHand, gameStatus, currentTurn, winnerId, userId } = props;
@@ -150,6 +184,60 @@ export default function Board() {
   const turnTimeoutSeconds = room.rules.turn_timeout_seconds ?? 5;
   const [turnTimeLeft, setTurnTimeLeft] = useState(turnTimeoutSeconds);
   const turnExpiredRef = useRef(false);
+  const [placingCard, setPlacingCard] = useState<string | null>(null);
+  const [isPlacementLocked, setIsPlacementLocked] = useState(false);
+  const [isBotActionPending, setIsBotActionPending] = useState(false);
+  const [drawnCards, setDrawnCards] = useState<string[]>([]);
+  const [showDrawnPlayOption, setShowDrawnPlayOption] = useState(false);
+  const [drawDecisionTimeLeft, setDrawDecisionTimeLeft] = useState(5);
+  const [flyingCard, setFlyingCard] = useState<FlyingCard | null>(null);
+  const [isFlying, setIsFlying] = useState(false);
+  const placementTimeoutRef = useRef<number | null>(null);
+  const botActionAvailableAtRef = useRef(0);
+  const botActionTimeoutsRef = useRef<number[]>([]);
+  const pendingBotActionsRef = useRef(0);
+
+  const clearPlacementTimeout = useCallback(() => {
+    if (placementTimeoutRef.current !== null) {
+      window.clearTimeout(placementTimeoutRef.current);
+      placementTimeoutRef.current = null;
+    }
+  }, []);
+
+  const beginPlacement = useCallback(
+    (card: string | null, durationMs = 700, from: FlyingCard['from'] = 'peer') => {
+      clearPlacementTimeout();
+      setPlacingCard(card);
+      setIsPlacementLocked(true);
+      if (card) {
+        setFlyingCard({ card, from });
+        setIsFlying(false);
+        window.requestAnimationFrame(() => setIsFlying(true));
+      }
+
+      placementTimeoutRef.current = window.setTimeout(() => {
+        setPlacingCard(null);
+        setFlyingCard(null);
+        setIsFlying(false);
+        setIsPlacementLocked(false);
+        placementTimeoutRef.current = null;
+      }, durationMs);
+    },
+    [clearPlacementTimeout],
+  );
+
+  useEffect(
+    () => () => {
+      clearPlacementTimeout();
+      for (const id of botActionTimeoutsRef.current) {
+        window.clearTimeout(id);
+      }
+      botActionTimeoutsRef.current = [];
+      pendingBotActionsRef.current = 0;
+      setIsBotActionPending(false);
+    },
+    [clearPlacementTimeout],
+  );
 
   // Keep a ref to the latest game state for async handlers
   const gameRef = useRef(game);
@@ -170,25 +258,69 @@ export default function Board() {
   }, [game.currentTurn, turnTimeoutSeconds]);
 
   useEffect(() => {
-    if (game.currentTurn == null || game.status !== 'in_progress') return;
+    if (game.currentTurn == null || game.status !== 'in_progress' || isPlacementLocked || isBotActionPending || showDrawnPlayOption) return;
 
     const timer = window.setInterval(() => {
       setTurnTimeLeft((current) => Math.max(current - 1, 0));
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [game.currentTurn, game.status]);
+  }, [game.currentTurn, game.status, isPlacementLocked, isBotActionPending, showDrawnPlayOption]);
+
+  useEffect(() => {
+    if (!showDrawnPlayOption) return;
+
+    setDrawDecisionTimeLeft(5);
+    const timer = window.setInterval(() => {
+      setDrawDecisionTimeLeft((current) => Math.max(current - 1, 0));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [showDrawnPlayOption]);
+
+  useEffect(() => {
+    if (!showDrawnPlayOption || drawDecisionTimeLeft > 0) return;
+
+    setShowDrawnPlayOption(false);
+    setDrawnCards([]);
+    if (game.currentTurn === userId) {
+      passTurnApi(room.id)
+        .then((data) => {
+          if (typeof data.current_turn === 'number') {
+            dispatch({ type: 'SET_TURN', turn: data.current_turn });
+          }
+        })
+        .catch((error) => {
+          console.error('draw decision auto-keep failed', error);
+          toast.error('Unable to keep drawn card automatically.');
+        });
+    }
+  }, [drawDecisionTimeLeft, game.currentTurn, room.id, showDrawnPlayOption, toast, userId]);
 
   const [connectedPlayers, setConnectedPlayers] = useState<Player[]>(room.players ?? []);
+  const connectedPlayersRef = useRef<Player[]>(room.players ?? []);
   const staticRoomPlayersRef = useRef<Player[]>(room.players ?? []);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
   const isMyTurn = useMemo(() => game.currentTurn === userId, [game.currentTurn, userId]);
 
   useEffect(() => {
+    if (!showDrawnPlayOption) return;
+    if (!isMyTurn) {
+      setShowDrawnPlayOption(false);
+      setDrawnCards([]);
+    }
+  }, [isMyTurn, showDrawnPlayOption]);
+
+  useEffect(() => {
     staticRoomPlayersRef.current = room.players ?? [];
+    connectedPlayersRef.current = room.players ?? [];
     setConnectedPlayers(room.players ?? []);
   }, [room.players]);
+
+  useEffect(() => {
+    connectedPlayersRef.current = connectedPlayers;
+  }, [connectedPlayers]);
 
   const passTurn = useCallback(async () => {
     try {
@@ -236,6 +368,11 @@ export default function Board() {
 
   const onCardPlayed = (raw: unknown) => {
     const data = raw as CardPlayedPayload;
+    const actorId = typeof data.player_id === 'number' ? data.player_id : null;
+    const playedCard = typeof data.card === 'string' ? data.card : '';
+    const isBotActor =
+      actorId !== null && connectedPlayersRef.current.some((p) => p.id === actorId && p.role === 'bot');
+
     const used = data.used_cards ?? data.usedCards ?? [];
     const eventHandCounts = data.hand_counts ?? data.handCounts;
     const eventDeckCount =
@@ -251,13 +388,43 @@ export default function Board() {
           ? data.turnPlayerId
           : null;
 
-    const patch: Partial<GameState> = {};
-    if (used.length) patch.topCard = used[used.length - 1];
-    if (eventHandCounts) patch.handCounts = eventHandCounts;
-    if (typeof eventDeckCount === 'number') patch.deckCount = eventDeckCount;
+    const applyCardPlayed = () => {
+      if (playedCard) {
+        beginPlacement(playedCard, isBotActor ? 900 : 720, isBotActor ? 'bot' : 'peer');
+      }
 
-    if (Object.keys(patch).length) dispatch({ type: 'SERVER_SYNC', payload: patch });
-    if (eventTurn !== null) dispatch({ type: 'SET_TURN', turn: eventTurn });
+      const patch: Partial<GameState> = {};
+      if (used.length) patch.topCard = used[used.length - 1];
+      if (eventHandCounts) patch.handCounts = eventHandCounts;
+      if (typeof eventDeckCount === 'number') patch.deckCount = eventDeckCount;
+
+      if (Object.keys(patch).length) dispatch({ type: 'SERVER_SYNC', payload: patch });
+      if (eventTurn !== null) dispatch({ type: 'SET_TURN', turn: eventTurn });
+    };
+
+    if (!isBotActor) {
+      applyCardPlayed();
+      return;
+    }
+
+    const now = Date.now();
+    const nextAt = Math.max(now, botActionAvailableAtRef.current) + 1100;
+    botActionAvailableAtRef.current = nextAt;
+    const delay = Math.max(0, nextAt - now);
+
+    pendingBotActionsRef.current += 1;
+    setIsBotActionPending(true);
+
+    const timeoutId = window.setTimeout(() => {
+      applyCardPlayed();
+      pendingBotActionsRef.current = Math.max(0, pendingBotActionsRef.current - 1);
+      if (pendingBotActionsRef.current === 0) {
+        setIsBotActionPending(false);
+      }
+      botActionTimeoutsRef.current = botActionTimeoutsRef.current.filter((id) => id !== timeoutId);
+    }, delay);
+
+    botActionTimeoutsRef.current.push(timeoutId);
   };
 
   const onHandSynced = (raw: unknown) => {
@@ -436,6 +603,7 @@ const onGameReset = () => {
       });
 
       try {
+        beginPlacement(card, 720, 'player');
         // Nosūta informāciju serverim par nospēlēto kārti
         await playCardApi(room.id, card);
       } catch (err) {
@@ -446,7 +614,7 @@ const onGameReset = () => {
         toast.error((err as Error)?.message ?? 'Failed to play card.');
       }
     },
-    [isMyTurn, room.id, uid, toast],
+    [isMyTurn, room.id, uid, toast, beginPlacement],
     
   );
 
@@ -458,7 +626,14 @@ const pickupCard = useCallback(async () => {
   pickingUpRef.current = true;
 
   try {
+    const previousHand = [...gameRef.current.hand];
     const data = await pickupCardApi(room.id);
+    const syncedHand = data.hand ?? gameRef.current.hand;
+    const addedCards = getAddedCards(previousHand, syncedHand);
+
+    // Check if any of the drawn cards are playable
+    const topCardAfterDrawing = (data.used_cards ?? []).at(-1) ?? gameRef.current.topCard;
+    const playableDrawn = addedCards.filter((c: string) => isValidPlay(c, topCardAfterDrawing));
 
     startTransition(() => {
       dispatch({
@@ -475,6 +650,14 @@ const pickupCard = useCallback(async () => {
       }
     });
 
+    // Show play/pass option if cards are playable and it's still my turn
+    if (playableDrawn.length > 0 && data.current_turn === userId) {
+      setDrawnCards(playableDrawn);
+      setShowDrawnPlayOption(true);
+      turnExpiredRef.current = false;
+      setTurnTimeLeft((current) => Math.max(current, 5));
+    }
+
     return data;
   } catch (err) {
     console.error('Failed to pick up card:', err);
@@ -483,7 +666,7 @@ const pickupCard = useCallback(async () => {
   } finally {
     pickingUpRef.current = false;
   }
-}, [isMyTurn, room.id, toast]);
+}, [isMyTurn, room.id, toast, userId]);
 
   const startGame = useCallback(() => {
     if (isStartingGame) return;
@@ -510,10 +693,13 @@ const pickupCard = useCallback(async () => {
 const canPlayCard = useCallback(
   (card: string) =>
     isMyTurn &&
+    !showDrawnPlayOption &&
+    !isPlacementLocked &&
+    !isBotActionPending &&
     !turnExpiredRef.current &&
     turnTimeLeft > 0 &&
     isValidPlay(card, gameRef.current.topCard),
-  [isMyTurn, turnTimeLeft]
+  [isMyTurn, turnTimeLeft, isPlacementLocked, isBotActionPending, showDrawnPlayOption]
 );
 
 // Guarded play: ignore clicks when not my turn, invalid, or turn has expired
@@ -527,9 +713,9 @@ const onPlay = useCallback(
 
 // Guarded pickup: ignore clicks when not my turn or turn has already expired
 const onPickup = useCallback(() => {
-  if (!isMyTurn || turnExpiredRef.current || turnTimeLeft <= 0) return;
+  if (!isMyTurn || turnExpiredRef.current || turnTimeLeft <= 0 || isPlacementLocked || isBotActionPending || showDrawnPlayOption) return;
   pickupCard();
-}, [isMyTurn, pickupCard, turnTimeLeft]);
+}, [isMyTurn, pickupCard, turnTimeLeft, isPlacementLocked, isBotActionPending, showDrawnPlayOption]);
 
 const handleTurnExpiry = useCallback(async () => {
   try {
@@ -543,13 +729,14 @@ const handleTurnExpiry = useCallback(async () => {
 }, [pickupCard, passTurn, userId]);
 
 useEffect(() => {
+  if (isPlacementLocked || isBotActionPending || showDrawnPlayOption) return;
   if (turnTimeLeft !== 0 || !isMyTurn || game.status !== 'in_progress') return;
   if (turnExpiredRef.current || turnJustStartedRef.current) return;
 
   turnExpiredRef.current = true;
   toast.error('Time is up! Your turn has ended.');
   handleTurnExpiry();
-}, [turnTimeLeft, isMyTurn, game.status, handleTurnExpiry, toast]);
+}, [turnTimeLeft, isMyTurn, game.status, handleTurnExpiry, toast, isPlacementLocked, isBotActionPending, showDrawnPlayOption]);
 
 const playAgain = useCallback(async () => {
   try {
@@ -591,7 +778,7 @@ const leftCount  = seats.left  ? (game.handCounts[seats.left.id]  ?? 0) : 0;
 const topCount   = seats.top   ? (game.handCounts[seats.top.id]   ?? 0) : 0;
 const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
 
-
+const placementCard = placingCard;
 
   return (
     <AppLayout>
@@ -699,9 +886,40 @@ const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
         {/* CENTER table */}
         <div className="row-start-3 md:row-start-2 col-start-1 md:col-start-2 min-w-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-4 md:gap-6">
-            <div className="flex gap-8 md:gap-12 items-center justify-center flex-wrap">
-              <Deck isMyTurn={isMyTurn && !turnExpiredRef.current && turnTimeLeft > 0} pickupCard={onPickup} />
-              <TopCard topCard={game.topCard} />
+            <div className="relative flex gap-8 md:gap-12 items-center justify-center flex-wrap">
+              {placementCard && flyingCard && isPlacementLocked && (
+                <div
+                  className="pointer-events-none absolute left-1/2 top-1/2 z-30 transition-transform duration-700 ease-out"
+                  style={{
+                    transform: isFlying
+                      ? 'translate(-15%, -85%) scale(0.88) rotate(0deg)'
+                      : flyingCard.from === 'player'
+                        ? 'translate(-130%, 130%) scale(1) rotate(-10deg)'
+                        : flyingCard.from === 'bot'
+                          ? 'translate(-100%, -190%) scale(1) rotate(8deg)'
+                          : 'translate(120%, 10%) scale(1) rotate(7deg)',
+                  }}
+                >
+                  <CardView card={placementCard} disabled className="w-10 h-14 sm:w-12 sm:h-16 shadow-2xl" />
+                </div>
+              )}
+              <Deck isMyTurn={isMyTurn && !turnExpiredRef.current && turnTimeLeft > 0 && !isPlacementLocked && !isBotActionPending} pickupCard={onPickup} />
+              <TopCard topCard={game.topCard} isPlacing={isPlacementLocked} />
+
+              <div className="pointer-events-none absolute top-full mt-3 left-1/2 -translate-x-1/2 h-10 w-56">
+                <div className="flex flex-col items-center gap-1">
+                  {isPlacementLocked && placingCard && (
+                    <div className="text-[11px] rounded-full bg-amber-500/20 border border-amber-400/40 px-3 py-1 text-amber-100">
+                      Placing {placingCard.replace('-', ' ')}...
+                    </div>
+                  )}
+                  {isBotActionPending && (
+                    <div className="text-[11px] rounded-full bg-cyan-500/20 border border-cyan-400/40 px-3 py-1 text-cyan-100">
+                      Bot is thinking...
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             {game.currentTurn != null && (
@@ -795,6 +1013,54 @@ const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
             <p className="text-sm text-zinc-400">
               “Play again” resets to Waiting so you can press Start.
             </p>
+          </div>
+        </div>
+      )}
+      {showDrawnPlayOption && drawnCards.length > 0 && (
+        <div className="fixed bottom-[max(env(safe-area-inset-bottom),14px)] left-1/2 z-50 -translate-x-1/2 w-[min(92vw,360px)] rounded-2xl border border-cyan-400/40 bg-zinc-950/95 p-4 shadow-2xl backdrop-blur">
+          <p className="text-center text-xs text-cyan-100/90">Draw decision • {drawDecisionTimeLeft}s</p>
+          <div className="mt-2 flex items-center justify-center gap-2">
+            {drawnCards.slice(0, 2).map((card) => {
+              const c = parseCard(card);
+              return (
+                <div
+                  key={card}
+                  className="h-24 w-16 rounded-lg border-2 border-cyan-400 bg-white font-bold shadow-lg flex flex-col items-center justify-center gap-1"
+                >
+                  <span className={`text-sm ${cardColor(c.suit)}`}>{c.value}</span>
+                  <span className={`text-xl ${cardColor(c.suit)}`}>{c.suit}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const playCandidate = drawnCards[0];
+                setShowDrawnPlayOption(false);
+                setDrawnCards([]);
+                if (playCandidate) {
+                  playCard(playCandidate);
+                }
+              }}
+              className="rounded-lg bg-cyan-400 px-3 py-2 text-sm font-semibold text-zinc-900 hover:bg-cyan-300 transition"
+            >
+              Play
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowDrawnPlayOption(false);
+                setDrawnCards([]);
+                if (game.currentTurn === userId) {
+                  passTurn();
+                }
+              }}
+              className="rounded-lg bg-zinc-800 px-3 py-2 text-sm font-semibold text-zinc-100 hover:bg-zinc-700 transition border border-zinc-600"
+            >
+              Keep
+            </button>
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 import { dashboard, login, register } from '@/routes';
 import { type SharedData } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 type DemoTurn = 'player' | 'bot';
 
@@ -14,6 +14,8 @@ type DemoState = {
     status: 'in_progress' | 'finished';
     winner: DemoTurn | null;
     note: string;
+    hasDrawnThisTurn: boolean;
+    justDrawn: string[];
 };
 
 const SUITS = ['♠', '♥', '♦', '♣'];
@@ -24,6 +26,18 @@ const cardColor = (suit: string) => (suit === '♥' || suit === '♦' ? 'text-ro
 const parseCard = (card: string): { value: string; suit: string } => {
     const [value = '', suit = ''] = card.split('-');
     return { value, suit };
+};
+
+const DemoCardFace = ({ card, className = '' }: { card: string; className?: string }) => {
+    const c = parseCard(card);
+    return (
+        <div className={`relative overflow-hidden rounded-xl border-2 border-black/20 bg-white shadow-lg ${className}`}>
+            <span className={`absolute left-1.5 top-1 text-[10px] font-bold leading-none ${cardColor(c.suit)}`}>{c.value}</span>
+            <span className={`absolute left-1.5 top-4 text-xs leading-none ${cardColor(c.suit)}`}>{c.suit}</span>
+            <span className={`absolute right-1.5 bottom-1 text-xs rotate-180 leading-none ${cardColor(c.suit)}`}>{c.suit}</span>
+            <span className={`absolute inset-0 flex items-center justify-center text-2xl font-bold ${cardColor(c.suit)}`}>{c.suit}</span>
+        </div>
+    );
 };
 
 const shuffle = <T,>(arr: T[]): T[] => {
@@ -69,6 +83,8 @@ const createDemoState = (): DemoState => {
         status: 'in_progress',
         winner: null,
         note: 'Play a matching card to start the mini game.',
+        hasDrawnThisTurn: false,
+        justDrawn: [],
     };
 };
 
@@ -107,21 +123,32 @@ export default function Welcome() {
                 topCard: card,
                 turn: 'bot',
                 note: 'Bot is thinking...',
+                hasDrawnThisTurn: false,
+                justDrawn: [],
             };
         });
     }, []);
 
     const drawForPlayer = useCallback(() => {
         setDemo((prev) => {
-            if (prev.status !== 'in_progress' || prev.turn !== 'player') return prev;
+            if (prev.status !== 'in_progress' || prev.turn !== 'player' || prev.hasDrawnThisTurn) return prev;
             const drawn = prev.deck[prev.deck.length - 1];
             if (!drawn) return { ...prev, note: 'Deck is empty.' };
+
+            const newPlayerHand = [...prev.playerHand, drawn];
+            const newJustDrawn = [drawn];
+            const canPlayJustDrawn = canPlay(drawn, prev.topCard);
 
             return {
                 ...prev,
                 deck: prev.deck.slice(0, -1),
-                playerHand: [...prev.playerHand, drawn],
-                note: `You drew ${drawn.replace('-', ' ')}.`,
+                playerHand: newPlayerHand,
+                justDrawn: newJustDrawn,
+                hasDrawnThisTurn: true,
+                note: canPlayJustDrawn 
+                    ? `You drew ${drawn.replace('-', ' ')}. You can play it!` 
+                    : `You drew ${drawn.replace('-', ' ')}. Your turn ends.`,
+                turn: canPlayJustDrawn ? 'player' : 'bot',
             };
         });
     }, []);
@@ -143,6 +170,8 @@ export default function Welcome() {
                         deck: withDraw.deck,
                         turn: 'player',
                         note: 'Bot passed. Your turn.',
+                        hasDrawnThisTurn: false,
+                        justDrawn: [],
                     };
                 }
 
@@ -168,15 +197,14 @@ export default function Welcome() {
                     topCard: playableCard,
                     turn: 'player',
                     note: `Bot played ${playableCard.replace('-', ' ')}. Your turn.`,
+                    hasDrawnThisTurn: false,
+                    justDrawn: [],
                 };
             });
         }, 900);
 
         return () => window.clearTimeout(timeout);
     }, [demo.status, demo.turn]);
-
-    const topCard = useMemo(() => parseCard(demo.topCard), [demo.topCard]);
-    const previewBotCard = useMemo(() => parseCard(demo.botHand[0] ?? 'A-♣'), [demo.botHand]);
 
     return (
         <>
@@ -316,149 +344,187 @@ export default function Welcome() {
                         <div className="relative mx-auto w-full max-w-lg">
                             <div className="rounded-3xl border border-black/10 bg-white/85 p-5 shadow-2xl shadow-black/10 dark:border-white/10 dark:bg-[#0e1622]/85 dark:shadow-cyan-500/10">
                                 <div className="mb-4 flex items-center justify-between">
-                                    <p className="text-xs uppercase tracking-[0.12em] text-zinc-600 dark:text-zinc-300">Playable Demo</p>
-                                    <p className="rounded-full bg-zinc-900 px-2 py-1 text-[11px] font-bold text-white dark:bg-cyan-400 dark:text-zinc-900">SIM</p>
+                                    <p className="text-xs uppercase tracking-[0.12em] text-zinc-600 dark:text-zinc-300">Playable Demo Board</p>
+                                    <p className="rounded-full bg-zinc-900 px-2 py-1 text-[11px] font-bold text-white dark:bg-cyan-400 dark:text-zinc-900">LIVE</p>
                                 </div>
 
-                                <div className="relative h-72 rounded-2xl border border-emerald-900/20 bg-[#14532d] p-4 dark:border-cyan-400/20 dark:bg-[#08232d]">
-                                    <div className="absolute left-4 top-10 h-36 w-24 rotate-[-8deg] rounded-xl border border-black/20 bg-white p-2 shadow-lg transition-all duration-300">
-                                        <p className={`text-xs font-bold ${cardColor(topCard.suit)}`}>{topCard.value} {topCard.suit}</p>
-                                        <p className={`mt-10 text-center text-4xl ${cardColor(topCard.suit)}`}>{topCard.suit}</p>
-                                    </div>
-                                    <div className="absolute left-24 top-14 h-36 w-24 rotate-[8deg] rounded-xl border border-black/20 bg-white p-2 shadow-lg transition-all duration-300">
-                                        <p className={`text-xs font-bold ${cardColor(previewBotCard.suit)}`}>{previewBotCard.value} {previewBotCard.suit}</p>
-                                        <p className={`mt-10 text-center text-4xl ${cardColor(previewBotCard.suit)}`}>{previewBotCard.suit}</p>
-                                    </div>
-                                    <div className="absolute right-6 top-8 rounded-xl border border-white/20 bg-black/20 px-3 py-2 text-xs text-white backdrop-blur">
-                                        <p>Deck: {demo.deck.length}</p>
-                                        <p>Turn: {demo.turn === 'player' ? 'You' : 'Bot'}</p>
-                                        <p>Status: {demo.status === 'finished' ? 'Finished' : 'Live'}</p>
+                                <div className="flex flex-col gap-4 rounded-2xl border border-emerald-900/20 bg-[#14532d] p-4 dark:border-cyan-400/20 dark:bg-[#08232d]">
+                                    {/* Bot Hand Section */}
+                                    <div>
+                                        <p className="mb-2 text-xs font-semibold text-white/60">BOT ({demo.botHand.length})</p>
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex gap-1">
+                                                {demo.botHand.slice(0, 3).map((_, idx) => (
+                                                    <div
+                                                        key={`bot-${idx}`}
+                                                        className="relative h-16 w-11 overflow-hidden rounded-lg border border-black/30 bg-gradient-to-br from-zinc-800 to-zinc-900 shadow-md"
+                                                    />
+                                                ))}
+                                            </div>
+                                            {demo.botHand.length > 3 && (
+                                                <p className="text-xs text-white/70">+{demo.botHand.length - 3}</p>
+                                            )}
+                                        </div>
                                     </div>
 
-                                    <div className="absolute inset-x-4 bottom-4">
-                                        <p className="mb-2 rounded-md bg-black/25 px-2 py-1 text-[11px] text-white/90">{demo.note}</p>
-                                        <div className="flex gap-1 overflow-x-auto pb-1">
+                                    {/* Middle: Top Card + Deck */}
+                                    <div className="flex items-center justify-between">
+                                        {/* Top Card */}
+                                        <div className="flex-1">
+                                            <div className="mx-auto h-24 w-16">
+                                                <DemoCardFace card={demo.topCard} className="h-24 w-16" />
+                                            </div>
+                                        </div>
+
+                                        {/* Deck & Info */}
+                                        <div className="flex flex-col items-center gap-2">
+                                            <div className="h-20 w-14 rounded-lg border-2 border-dashed border-white/30 bg-white/10 flex items-center justify-center">
+                                                <div className="text-center">
+                                                    <p className="text-sm font-bold text-white">{demo.deck.length}</p>
+                                                    <p className="text-[10px] text-white/60">left</p>
+                                                </div>
+                                            </div>
+                                            <div className="rounded-lg bg-black/30 px-2 py-1 text-center text-[10px] text-white">
+                                                <p className="font-semibold">{demo.turn === 'player' ? 'Your Turn' : 'Bot Turn'}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Player Hand Section */}
+                                    <div>
+                                        <p className="mb-2 text-xs font-semibold text-white/60">YOUR HAND ({demo.playerHand.length})</p>
+                                        <div className="flex gap-2 overflow-x-auto pb-2">
                                             {demo.playerHand.map((card, idx) => {
-                                                const c = parseCard(card);
                                                 const playable = canPlay(card, demo.topCard) && demo.turn === 'player' && demo.status === 'in_progress';
+                                                const isJustDrawn = demo.justDrawn.includes(card);
                                                 return (
                                                     <button
                                                         key={`${card}-${idx}`}
                                                         type="button"
                                                         onClick={() => playDemoCard(card)}
                                                         disabled={!playable}
-                                                        className={`h-14 w-10 shrink-0 rounded-md border border-black/20 bg-white text-[10px] font-bold shadow transition ${playable ? 'ring-2 ring-amber-300 hover:-translate-y-1' : 'opacity-80'}`}
-                                                        title={playable ? 'Play card' : 'Not playable'}
+                                                        className={`h-24 w-16 shrink-0 rounded-lg border-2 font-bold shadow-lg transition ${
+                                                            playable 
+                                                                ? 'border-amber-400 bg-white hover:-translate-y-2 cursor-pointer ring-2 ring-amber-300' 
+                                                                : 'border-zinc-300 bg-white/80 opacity-55'
+                                                        } ${isJustDrawn ? 'ring-2 ring-green-400 border-green-400' : ''}`}
+                                                        title={playable ? 'Click to play' : 'Not playable'}
                                                     >
-                                                        <span className={cardColor(c.suit)}>{c.value}</span>
-                                                        <br />
-                                                        <span className={cardColor(c.suit)}>{c.suit}</span>
+                                                        <DemoCardFace card={card} className="h-full w-full" />
                                                     </button>
                                                 );
                                             })}
                                         </div>
                                     </div>
+
+                                    {/* Status */}
+                                    {demo.status === 'finished' && (
+                                        <div className="rounded-lg bg-yellow-900/30 px-3 py-2 text-center">
+                                            <p className="text-sm font-bold text-yellow-100">
+                                                {demo.winner === 'player' ? '🎉 You Won!' : '🤖 Bot Won!'}
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
 
-                                <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
-                                    <div className="rounded-lg border border-black/10 bg-black/[0.03] p-2 text-zinc-700 dark:border-white/10 dark:bg-white/10 dark:text-zinc-200">
-                                        You: {demo.playerHand.length}
-                                    </div>
-                                    <div className="rounded-lg border border-black/10 bg-black/[0.03] p-2 text-zinc-700 dark:border-white/10 dark:bg-white/10 dark:text-zinc-200">
-                                        Bot: {demo.botHand.length}
-                                    </div>
-                                    <div className="rounded-lg border border-black/10 bg-black/[0.03] p-2 text-zinc-700 dark:border-white/10 dark:bg-white/10 dark:text-zinc-200">
-                                        Winner: {demo.winner === null ? '-' : demo.winner === 'player' ? 'You' : 'Bot'}
-                                    </div>
-                                </div>
-
-                                <div className="mt-3 flex flex-wrap gap-2">
+                                {/* Controls */}
+                                <div className="mt-4 flex flex-wrap gap-2">
                                     <button
                                         type="button"
                                         onClick={drawForPlayer}
-                                        disabled={demo.turn !== 'player' || demo.status !== 'in_progress'}
-                                        className="rounded-xl border border-black/15 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-white/10 dark:text-zinc-100 dark:hover:bg-white/20"
+                                        disabled={demo.turn !== 'player' || demo.status !== 'in_progress' || demo.hasDrawnThisTurn || demo.playerHand.some((card) => canPlay(card, demo.topCard))}
+                                        className="flex-1 rounded-xl border border-black/15 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:bg-white/10 dark:text-zinc-100 dark:hover:bg-white/20"
                                     >
-                                        Draw Card
+                                        {demo.hasDrawnThisTurn ? 'Drew Once' : 'Draw Card'}
                                     </button>
                                     <button
                                         type="button"
                                         onClick={resetDemo}
-                                        className="rounded-xl border border-black/15 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 transition hover:bg-zinc-50 dark:border-white/15 dark:bg-white/10 dark:text-zinc-100 dark:hover:bg-white/20"
+                                        className="flex-1 rounded-xl border border-black/15 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 transition hover:bg-zinc-50 dark:border-white/15 dark:bg-white/10 dark:text-zinc-100 dark:hover:bg-white/20"
                                     >
-                                        Reset Demo
+                                        Reset
                                     </button>
                                 </div>
                             </div>
                         </div>
                     </section>
 
-                    <section className="pb-14">
+                    <section className="pb-12">
                         <div className="mb-4 flex items-center justify-between">
                             <h3 className="text-xl font-bold text-zinc-900 dark:text-zinc-100" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-                                Round Flow
+                                How It Works
                             </h3>
-                            <p className="text-xs uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400">Quick and brutal</p>
+                            <p className="text-xs uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400">Simple flow, high pressure</p>
                         </div>
 
-                        <div className="grid gap-4 md:grid-cols-4">
-                            <article className="rounded-2xl border border-black/10 bg-white/80 p-5 shadow-sm transition hover:-translate-y-1 dark:border-white/10 dark:bg-white/10">
-                                <p className="text-xs uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400">Step 1</p>
-                                <h4 className="mt-2 text-base font-bold text-zinc-900 dark:text-zinc-100">Join Room</h4>
-                                <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">Create or join a room with up to four players.</p>
+                        <div className="grid gap-4 md:grid-cols-3">
+                            <article className="rounded-2xl border border-black/10 bg-white/85 p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
+                                <p className="text-xs uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400">1. Join</p>
+                                <h4 className="mt-2 text-base font-bold text-zinc-900 dark:text-zinc-100">Create or Enter a Room</h4>
+                                <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">Public and private rooms support quick solo starts or full multiplayer tables.</p>
                             </article>
-                            <article className="rounded-2xl border border-black/10 bg-white/80 p-5 shadow-sm transition hover:-translate-y-1 dark:border-white/10 dark:bg-white/10">
-                                <p className="text-xs uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400">Step 2</p>
-                                <h4 className="mt-2 text-base font-bold text-zinc-900 dark:text-zinc-100">Match Card</h4>
-                                <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">Play by suit or value to keep momentum.</p>
+                            <article className="rounded-2xl border border-black/10 bg-white/85 p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
+                                <p className="text-xs uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400">2. Play</p>
+                                <h4 className="mt-2 text-base font-bold text-zinc-900 dark:text-zinc-100">Match Suit or Value</h4>
+                                <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">Every turn is straightforward, but timing and hand management decide who controls the pace.</p>
                             </article>
-                            <article className="rounded-2xl border border-black/10 bg-white/80 p-5 shadow-sm transition hover:-translate-y-1 dark:border-white/10 dark:bg-white/10">
-                                <p className="text-xs uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400">Step 3</p>
-                                <h4 className="mt-2 text-base font-bold text-zinc-900 dark:text-zinc-100">Beat Timer</h4>
-                                <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">Hesitate too long and your turn can collapse.</p>
-                            </article>
-                            <article className="rounded-2xl border border-black/10 bg-white/80 p-5 shadow-sm transition hover:-translate-y-1 dark:border-white/10 dark:bg-white/10">
-                                <p className="text-xs uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400">Step 4</p>
-                                <h4 className="mt-2 text-base font-bold text-zinc-900 dark:text-zinc-100">Empty Hand</h4>
-                                <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">First player out of cards wins the round.</p>
+                            <article className="rounded-2xl border border-black/10 bg-white/85 p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
+                                <p className="text-xs uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400">3. Finish</p>
+                                <h4 className="mt-2 text-base font-bold text-zinc-900 dark:text-zinc-100">Empty Hand to Win</h4>
+                                <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">Beat the timer, force hard decisions, and clear your hand before anyone else can.</p>
                             </article>
                         </div>
                     </section>
 
-                    <section className="rounded-3xl border border-black/10 bg-zinc-900 p-6 text-zinc-100 shadow-2xl md:p-8 dark:border-white/10 dark:bg-[#05090f]">
-                        <div className="grid gap-8 md:grid-cols-[0.95fr_1.05fr] md:items-center">
-                            <div>
-                                <h3 className="text-2xl font-bold" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-                                    Not another generic card page.
-                                </h3>
-                                <p className="mt-3 text-sm leading-relaxed text-zinc-300">
-                                    This game is about pressure and imperfect decisions. That is the vibe the page should communicate too.
-                                    Fast rounds, hard pivots, and no autopilot.
-                                </p>
+                    <section className="grid gap-4 pb-12 md:grid-cols-[1.1fr_0.9fr]">
+                        <div className="rounded-3xl border border-black/10 bg-white/85 p-6 shadow-lg dark:border-white/10 dark:bg-white/10">
+                            <h3 className="text-xl font-bold text-zinc-900 dark:text-zinc-100" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                                Built for Clean, Real-Time Play
+                            </h3>
+                            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                <div className="rounded-xl border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/5">
+                                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Live room sync</p>
+                                    <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">Instant state updates for turns, hands, and top card.</p>
+                                </div>
+                                <div className="rounded-xl border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/5">
+                                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Fast room setup</p>
+                                    <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">Create custom rules and launch without a long setup flow.</p>
+                                </div>
+                                <div className="rounded-xl border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/5">
+                                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">AI support</p>
+                                    <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">Fill seats with bots so rounds start immediately.</p>
+                                </div>
+                                <div className="rounded-xl border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/5">
+                                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Timer pressure</p>
+                                    <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">Keeps each round focused and prevents stalled turns.</p>
+                                </div>
                             </div>
+                        </div>
 
-                            <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-3xl border border-black/10 bg-zinc-900 p-6 text-zinc-100 shadow-xl dark:border-white/10 dark:bg-[#05090f]">
+                            <h3 className="text-xl font-bold" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                                Ready to Start?
+                            </h3>
+                            <p className="mt-2 text-sm text-zinc-300">
+                                Jump into a fast game now or open Home to manage rooms and settings.
+                            </p>
+
+                            <div className="mt-5 grid gap-3">
                                 {auth.user ? (
                                     <>
                                         <Link
                                             href="/quick-ai-room"
                                             method="post"
                                             as="button"
-                                            className="inline-flex items-center justify-center rounded-xl bg-zinc-100 px-5 py-3 text-sm font-bold text-zinc-900 transition hover:bg-white"
+                                            className="inline-flex items-center justify-center rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-zinc-900 transition hover:bg-cyan-300"
                                         >
                                             Quick AI Match
                                         </Link>
                                         <Link
                                             href={dashboard()}
-                                            className="inline-flex items-center justify-center rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-zinc-900 transition hover:bg-cyan-300"
-                                        >
-                                            Open Dashboard
-                                        </Link>
-                                        <Link
-                                            href={dashboard()}
                                             className="inline-flex items-center justify-center rounded-xl border border-zinc-500 px-5 py-3 text-sm font-semibold text-zinc-100 transition hover:border-zinc-300"
                                         >
-                                            Manage Rooms
+                                            Open Home
                                         </Link>
                                     </>
                                 ) : (
@@ -467,7 +533,7 @@ export default function Welcome() {
                                             href={register()}
                                             className="inline-flex items-center justify-center rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-zinc-900 transition hover:bg-cyan-300"
                                         >
-                                            Sign Up and Play
+                                            Create Account
                                         </Link>
                                         <Link
                                             href={login()}
