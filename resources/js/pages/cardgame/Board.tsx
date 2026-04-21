@@ -28,7 +28,7 @@ import { getSeats } from '@/utils/getSeats';
 type PlayerLite = { id: string; name?: string };
 
 // ---------- Types ----------
-type Player = { id: number; name?: string };
+type Player = { id: number; name?: string; role?: string };
 
 type Room = {
   id: number;
@@ -66,6 +66,7 @@ type GameStartedPayload = {
   deck_count?: number;
   hand_counts?: Record<string, number>;
   used_cards?: string[];
+  players?: Array<{ id: number; name?: string; role?: string }>;
 };
 
 type CardPlayedPayload = {
@@ -179,9 +180,15 @@ export default function Board() {
   }, [game.currentTurn, game.status]);
 
   const [connectedPlayers, setConnectedPlayers] = useState<Player[]>(room.players ?? []);
+  const staticRoomPlayersRef = useRef<Player[]>(room.players ?? []);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
   const isMyTurn = useMemo(() => game.currentTurn === userId, [game.currentTurn, userId]);
+
+  useEffect(() => {
+    staticRoomPlayersRef.current = room.players ?? [];
+    setConnectedPlayers(room.players ?? []);
+  }, [room.players]);
 
   const passTurn = useCallback(async () => {
     try {
@@ -217,6 +224,13 @@ export default function Board() {
       },
     });
     dispatch({ type: 'SET_TURN', turn: eventTurn });
+
+    if (Array.isArray(data.players) && data.players.length) {
+      const mergedPlayers = uniqById([...(staticRoomPlayersRef.current ?? []), ...data.players]);
+      staticRoomPlayersRef.current = mergedPlayers;
+      setConnectedPlayers(mergedPlayers);
+    }
+
     setIsStartingGame(false);
   };
 
@@ -328,7 +342,7 @@ const onGameReset = () => {
         id: m.id,
         name: m.name ?? `Player ${m.id}`,
       }));
-      setConnectedPlayers(uniqById(players));
+      setConnectedPlayers(uniqById([...(staticRoomPlayersRef.current ?? []), ...players]));
     });
 
     channel.joining((member: PresenceMember) => {
@@ -337,7 +351,12 @@ const onGameReset = () => {
     });
 
     channel.leaving((member: PresenceMember) => {
-      setConnectedPlayers((prev) => (prev ?? []).filter((p) => p.id !== member.id));
+      setConnectedPlayers((prev) => {
+        const withoutLeaving = (prev ?? []).filter((p) => p.id !== member.id);
+        const bots = (staticRoomPlayersRef.current ?? []).filter((p) => p.role === 'bot');
+
+        return uniqById([...bots, ...withoutLeaving]);
+      });
     });
 
     channel.listen('.game-started', onGameStarted);
@@ -579,7 +598,7 @@ const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
       <Head title="Game" />
       <div
         className="
-          h-screen w-full grid
+          min-h-[100dvh] w-full grid
           /* Mobile-first: single column stack */
           grid-cols-1 grid-rows-[auto_auto_1fr_auto]
           /* Desktop: 3 columns slim sides */
@@ -588,7 +607,7 @@ const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
           lg:grid-cols-[112px_minmax(0,1fr)_112px]
           gap-3 md:gap-4 p-3 md:p-4
           bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white relative overflow-hidden
-          pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]
+          pt-[max(env(safe-area-inset-top),8px)] pb-[max(env(safe-area-inset-bottom),12px)]
         "
       >
         {/* TOP opponent (row 1, center col) */}
@@ -679,8 +698,8 @@ const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
 
         {/* CENTER table */}
         <div className="row-start-3 md:row-start-2 col-start-1 md:col-start-2 min-w-0 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-6">
-            <div className="flex gap-12 items-center justify-center flex-wrap">
+          <div className="flex flex-col items-center gap-4 md:gap-6">
+            <div className="flex gap-8 md:gap-12 items-center justify-center flex-wrap">
               <Deck isMyTurn={isMyTurn && !turnExpiredRef.current && turnTimeLeft > 0} pickupCard={onPickup} />
               <TopCard topCard={game.topCard} />
             </div>
@@ -694,7 +713,7 @@ const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
                   </span>
                 </div>
                 <div className="text-sm text-indigo-600 dark:text-indigo-300">
-                  {game.currentTurn === userId ? 'Your turn' : 'Time remaining'}: {turnTimeLeft}s
+                  {game.currentTurn === userId ? 'Your turn' : 'Opponent turn'}: {turnTimeLeft}s
                 </div>
               </div>
             )}
@@ -721,7 +740,7 @@ const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
         </div>
 
         {/* BOTTOM: your hand + controls */}
-        <div className="row-start-4 md:row-start-3 col-span-1 md:col-span-3 flex flex-col items-center gap-3">
+        <div className="row-start-4 md:row-start-3 col-span-1 md:col-span-3 flex flex-col items-center gap-3 pb-2 md:pb-0">
           <PlayerHand
             hand={game.hand}
             topCard={game.topCard}
@@ -749,13 +768,13 @@ const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
 
       {game.status === 'finished' && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
-          <div className="bg-black rounded-lg p-6 w-full max-w-md text-center space-y-4 shadow-xl">
+          <div className="bg-zinc-950 text-zinc-100 rounded-lg p-6 w-full max-w-md text-center space-y-4 shadow-xl border border-white/10">
             <h2 className="text-2xl font-bold">
               {game.winnerId === userId ? 'You win! 🎉' : 'Game over'}
             </h2>
 
             {game.winnerId !== userId && game.winnerId != null && (
-              <p className="text-gray-300">Winner: Player {game.winnerId}</p>
+              <p className="text-zinc-300">Winner: Player {game.winnerId}</p>
             )}
 
             <div className="flex gap-3 justify-center">
@@ -773,7 +792,7 @@ const rightCount = seats.right ? (game.handCounts[seats.right.id] ?? 0) : 0;
               </button>
             </div>
 
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-zinc-400">
               “Play again” resets to Waiting so you can press Start.
             </p>
           </div>

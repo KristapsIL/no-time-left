@@ -26,42 +26,42 @@ export default function RoomCard({ room, currentUserId }: { room: Room; currentU
   const canJoin = isExistingPlayer || (!isRoomFull && !isGameActive && !isGameFinished);
 
   return (
-    <div className={`rounded-xl border bg-white dark:bg-neutral-900 shadow hover:shadow-lg transition p-4 flex flex-col justify-between ${
+    <div className={`rounded-2xl border bg-white/85 dark:bg-[#0d1621]/85 backdrop-blur shadow hover:shadow-lg transition p-4 flex flex-col justify-between ${
       isExistingPlayer 
-        ? 'border-blue-300 dark:border-blue-600 ring-1 ring-blue-100 dark:ring-blue-900' :
+        ? 'border-cyan-300 dark:border-cyan-500 ring-1 ring-cyan-100 dark:ring-cyan-900/60' :
       canJoin 
-        ? 'border-gray-200 dark:border-gray-700' 
-        : 'border-gray-300 dark:border-gray-600 opacity-75'
+        ? 'border-black/10 dark:border-white/10' 
+        : 'border-black/15 dark:border-white/15 opacity-75'
     }`}>
       <div>
         <div className="flex justify-between items-start mb-2">
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
             {room.room_name}
           </h2>
         </div>
         
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">
           Players: {currentPlayers}/{maxPlayers}
         </p>
         
-        <p className="text-xs text-gray-400 mt-1">
+        <p className="text-xs text-zinc-500 mt-1">
           {room.rules.public ? "Public Room" : "Private Room"}
         </p>
         
         {room.rules.rules.length > 0 && (
-          <p className="text-xs text-gray-500 mt-2">
+          <p className="text-xs text-zinc-500 mt-2">
             Rules: {room.rules.rules.join(", ")}
           </p>
         )}
 
         {typeof room.rules.turn_timeout_seconds === 'number' && (
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-zinc-500 mt-1">
             Turn timeout: {room.rules.turn_timeout_seconds}s
           </p>
         )}
         
         {gameStatus && (
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-zinc-500 mt-1">
             Status: {gameStatus.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
           </p>
         )}
@@ -71,10 +71,10 @@ export default function RoomCard({ room, currentUserId }: { room: Room; currentU
         type="button"
         onClick={() => canJoin && router.visit(`/joinroom/${room.id}`)}
         disabled={!canJoin}
-        className={`mt-4 w-full px-4 py-2 rounded-lg transition font-medium ${
+        className={`mt-4 w-full px-4 py-2 rounded-xl transition font-medium ${
           canJoin
             ? 'bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer'
-            : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+            : 'bg-zinc-300 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 cursor-not-allowed'
         }`}
       >
         {canJoin ? 

@@ -16,19 +16,22 @@ class GameStarted implements ShouldBroadcastNow
     public array $usedCards;
     public int $turnPlayerId;
     public int $deckCount;
+    public array $players;
 
     public function __construct(
         int $roomId,
         array $handCounts,
         array $usedCards,
         int $turnPlayerId,
-        int $deckCount
+        int $deckCount,
+        array $players = [],
     ) {
         $this->roomId = $roomId;
         $this->handCounts = $handCounts;
         $this->usedCards = $usedCards;
         $this->turnPlayerId = $turnPlayerId;
         $this->deckCount = $deckCount;
+        $this->players = $players;
     }
 
     public function broadcastOn()
@@ -48,6 +51,7 @@ class GameStarted implements ShouldBroadcastNow
             'used_cards'     => $this->usedCards,
             'turn_player_id' => $this->turnPlayerId,
             'deck_count'     => $this->deckCount,
+            'players'        => $this->players,
         ];
     }
 }

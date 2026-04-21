@@ -22,20 +22,20 @@ export const Deck: React.FC<DeckProps> = React.memo(({ isMyTurn, pickupCard }) =
         border: 'none',
         background: 'transparent',
         position: 'relative',
-        width: 90,
-        height: 130,
+        width: 80,
+        height: 118,
       }}
       title={!isMyTurn ? 'Wait your turn' : 'Draw a card'}
     >
       {/* Stack effect */}
       <div className="absolute" style={{ top: 4, left: 4, zIndex: 1 }}>
-        <CardBack width={80} height={120} fillColor="#1f2937" bandColor="#0ea5e9" rimColor="rgba(0,0,0,0.35)" label="" />
+        <CardBack width={72} height={108} fillColor="#1f2937" bandColor="#0ea5e9" rimColor="rgba(0,0,0,0.35)" label="" />
       </div>
       <div className="absolute" style={{ top: 2, left: 2, zIndex: 2 }}>
-        <CardBack width={80} height={120} fillColor="#1f2937" bandColor="#0ea5e9" rimColor="rgba(0,0,0,0.35)" label="" />
+        <CardBack width={72} height={108} fillColor="#1f2937" bandColor="#0ea5e9" rimColor="rgba(0,0,0,0.35)" label="" />
       </div>
       <div className="absolute" style={{ top: 0, left: 0, zIndex: 3 }}>
-        <CardBack width={80} height={120} fillColor="#1f2937" bandColor="#0ea5e9" rimColor="rgba(0,0,0,0.35)" label="" />
+        <CardBack width={72} height={108} fillColor="#1f2937" bandColor="#0ea5e9" rimColor="rgba(0,0,0,0.35)" label="" />
       </div>
     </button>
   );

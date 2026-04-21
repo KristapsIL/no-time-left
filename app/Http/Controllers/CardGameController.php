@@ -10,6 +10,10 @@ use Illuminate\Support\Collection;
 use App\Models\Room;
 use App\Models\RoomRules;
 use App\Models\CardGame;
+use App\Models\User;
+
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 use App\Events\GameStarted;
 use App\Events\HandSynced;
@@ -21,6 +25,310 @@ class CardGameController extends Controller
         if (!$room->players()->where('users.id', $userId)->exists()) {
             abort(403, 'You must join this room first.');
         }
+    }
+
+    protected function ensureMinimumPlayersWithBots(Room $room): void
+    {
+        $rules = $room->rules;
+        $configuredBots = max(0, (int) ($rules?->bot_fill_count ?? 1));
+        $maxPlayers = max(2, (int) ($rules?->max_players ?? 4));
+        $targetPlayers = min($maxPlayers, max(2, $room->players()->count() + $configuredBots));
+
+        $currentCount = $room->players()->count();
+
+        while ($currentCount < $targetPlayers) {
+            $bot = User::query()->forceCreate([
+                'name'              => 'Bot ' . strtoupper(Str::random(4)),
+                'role'              => 'bot',
+                'email'             => 'bot+' . Str::uuid() . '@no-time-left.local',
+                'email_verified_at' => now(),
+                'password'          => Hash::make(Str::random(32)),
+            ]);
+
+            DB::table('room_user')->updateOrInsert(
+                ['user_id' => $bot->id],
+                [
+                    'room_id'    => $room->id,
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ]
+            );
+
+            $currentCount++;
+        }
+    }
+
+    protected function isBotUserId(int $userId): bool
+    {
+        return User::query()->whereKey($userId)->where('role', 'bot')->exists();
+    }
+
+    protected function nextPlayerId(Room $room, ?int $currentTurn): ?int
+    {
+        $playerIds = $room->players()
+            ->orderBy('room_user.created_at')
+            ->pluck('users.id')
+            ->toArray();
+
+        if (empty($playerIds)) {
+            return null;
+        }
+
+        $currentIndex = array_search($currentTurn, $playerIds, true);
+        if ($currentIndex === false) {
+            $currentIndex = -1;
+        }
+
+        $nextIndex = ($currentIndex + 1) % count($playerIds);
+
+        return $playerIds[$nextIndex] ?? null;
+    }
+
+    protected function runBotTurns(int $roomId): void
+    {
+        for ($i = 0; $i < 50; $i++) {
+            $action = DB::transaction(function () use ($roomId) {
+                $room = Room::with(['game', 'players', 'rules'])->lockForUpdate()->findOrFail($roomId);
+                $game = $room->game;
+
+                if (!$game || $game->game_status !== 'in_progress' || $game->current_turn === null) {
+                    return null;
+                }
+
+                $turnPlayerId = (int) $game->current_turn;
+                if (!$this->isBotUserId($turnPlayerId)) {
+                    return null;
+                }
+
+                $hands = $game->player_hands ?? [];
+                $playerKey = (string) $turnPlayerId;
+                $hand = $hands[$playerKey] ?? [];
+                $usedCards = $game->used_cards ?? [];
+                $topCard = !empty($usedCards) ? $usedCards[array_key_last($usedCards)] : null;
+                $difficulty = strtolower((string) ($room->rules?->bot_difficulty ?? 'medium'));
+                $roomRules = $room->rules?->rules ?? [];
+                $pickUpTillMatch = is_array($roomRules) && in_array('pick_up_till_match', $roomRules, true);
+
+                if (!in_array($difficulty, ['easy', 'medium', 'hard'], true)) {
+                    $difficulty = 'medium';
+                }
+
+                $playable = $this->chooseBotCard($hand, $topCard, $difficulty);
+
+                if ($playable !== null) {
+                    $idx = array_search($playable, $hand, true);
+                    if ($idx !== false) {
+                        array_splice($hand, $idx, 1);
+                    }
+
+                    $hands[$playerKey] = $hand;
+                    $usedCards[] = $playable;
+
+                    $finished = count($hand) === 0;
+                    $winnerId = $finished ? $turnPlayerId : null;
+                    $nextTurn = $finished ? null : $this->nextPlayerId($room, $turnPlayerId);
+
+                    $game->player_hands = $hands;
+                    $game->used_cards = array_values($usedCards);
+                    $game->current_turn = $nextTurn;
+                    $game->has_picked_up = false;
+                    $game->game_status = $finished ? 'finished' : 'in_progress';
+                    if ($finished) {
+                        $game->winner = $winnerId;
+                    }
+                    $game->save();
+
+                    return [
+                        'kind'       => 'play',
+                        'room_id'    => $game->room_id,
+                        'user_id'    => $turnPlayerId,
+                        'card'       => $playable,
+                        'used_cards' => $game->used_cards,
+                        'hand_counts'=> collect($hands)->map(fn ($h) => count($h))->toArray(),
+                        'deck_count' => count($game->deck ?? []),
+                        'turn'       => $game->current_turn,
+                        'finished'   => $finished,
+                        'winner_id'  => $winnerId,
+                    ];
+                }
+
+                $deck = $game->deck ?? [];
+                $this->checkDeckAndReshuffle($deck, $game);
+                $deck = $game->deck ?? $deck;
+
+                $drawnPlayable = null;
+                do {
+                    if (count($deck) === 0) {
+                        break;
+                    }
+
+                    $drawn = array_shift($deck);
+                    $hand[] = $drawn;
+                    $hands[$playerKey] = $hand;
+
+                    $topCardAfterDraw = !empty($usedCards) ? $usedCards[array_key_last($usedCards)] : null;
+                    if ($topCardAfterDraw && $this->isValidPlay($drawn, $topCardAfterDraw)) {
+                        $drawnPlayable = $drawn;
+                        break;
+                    }
+                } while ($pickUpTillMatch);
+
+                if ($drawnPlayable !== null) {
+                    $idx = array_search($drawnPlayable, $hand, true);
+                    if ($idx !== false) {
+                        array_splice($hand, $idx, 1);
+                    }
+
+                    $hands[$playerKey] = $hand;
+                    $usedCards[] = $drawnPlayable;
+
+                    $finished = count($hand) === 0;
+                    $winnerId = $finished ? $turnPlayerId : null;
+                    $nextTurn = $finished ? null : $this->nextPlayerId($room, $turnPlayerId);
+
+                    $game->player_hands = $hands;
+                    $game->deck = array_values($deck);
+                    $game->used_cards = array_values($usedCards);
+                    $game->current_turn = $nextTurn;
+                    $game->has_picked_up = false;
+                    $game->game_status = $finished ? 'finished' : 'in_progress';
+                    if ($finished) {
+                        $game->winner = $winnerId;
+                    }
+                    $game->save();
+
+                    return [
+                        'kind'       => 'play',
+                        'room_id'    => $game->room_id,
+                        'user_id'    => $turnPlayerId,
+                        'card'       => $drawnPlayable,
+                        'used_cards' => $game->used_cards,
+                        'hand_counts'=> collect($hands)->map(fn ($h) => count($h))->toArray(),
+                        'deck_count' => count($game->deck ?? []),
+                        'turn'       => $game->current_turn,
+                        'finished'   => $finished,
+                        'winner_id'  => $winnerId,
+                    ];
+                }
+
+                $game->player_hands = $hands;
+                $game->deck = array_values($deck);
+
+                $nextTurn = $this->nextPlayerId($room, $turnPlayerId);
+                $game->current_turn = $nextTurn;
+                $game->has_picked_up = false;
+                $game->save();
+
+                return [
+                    'kind'       => 'pass',
+                    'room_id'    => $game->room_id,
+                    'user_id'    => $turnPlayerId,
+                    'card'       => '',
+                    'used_cards' => $game->used_cards ?? [],
+                    'hand_counts'=> collect($game->player_hands ?? [])->map(fn ($h) => count($h))->toArray(),
+                    'deck_count' => count($game->deck ?? []),
+                    'turn'       => $game->current_turn,
+                    'finished'   => false,
+                    'winner_id'  => null,
+                ];
+            });
+
+            if (!$action) {
+                break;
+            }
+
+            if (!empty($action['finished'])) {
+                broadcast(new \App\Events\GameFinished(
+                    roomId: $action['room_id'],
+                    winnerId: $action['winner_id'],
+                    handCounts: $action['hand_counts'],
+                ));
+
+                break;
+            }
+
+            broadcast(new \App\Events\CardPlayed(
+                roomId: $action['room_id'],
+                userId: $action['user_id'],
+                card: $action['card'],
+                handCounts: $action['hand_counts'],
+                deckCount: $action['deck_count'],
+                turnPlayerId: $action['turn'],
+                usedCards: $action['used_cards'],
+            ));
+        }
+    }
+
+    protected function chooseBotCard(array $hand, ?string $topCard, string $difficulty): ?string
+    {
+        $playable = [];
+
+        foreach ($hand as $candidate) {
+            if ($topCard === null || $this->isValidPlay($candidate, $topCard)) {
+                $playable[] = $candidate;
+            }
+        }
+
+        if (empty($playable)) {
+            return null;
+        }
+
+        if ($difficulty === 'easy') {
+            return $playable[0];
+        }
+
+        $suitCounts = [];
+        $valueCounts = [];
+        foreach ($hand as $card) {
+            [$value, $suit] = $this->splitCard($card);
+            $suitCounts[$suit] = ($suitCounts[$suit] ?? 0) + 1;
+            $valueCounts[$value] = ($valueCounts[$value] ?? 0) + 1;
+        }
+
+        $topValue = null;
+        $topSuit = null;
+        if ($topCard !== null) {
+            [$topValue, $topSuit] = $this->splitCard($topCard);
+        }
+
+        $bestCard = $playable[0];
+        $bestScore = -INF;
+
+        foreach ($playable as $candidate) {
+            [$value, $suit] = $this->splitCard($candidate);
+
+            $score = 0.0;
+            $score += ($suitCounts[$suit] ?? 0) * 2.0;
+            $score += ($valueCounts[$value] ?? 0) * 1.4;
+
+            if ($topSuit !== null && $suit === $topSuit) {
+                $score += 1.0;
+            }
+
+            if ($topValue !== null && $value === $topValue) {
+                $score += 1.2;
+            }
+
+            if ($difficulty === 'hard') {
+                $score += ($suitCounts[$suit] ?? 0) * 1.5;
+                $score += ($valueCounts[$value] ?? 0) * 1.2;
+
+                if (in_array($value, ['A', 'K', 'Q', 'J'], true)) {
+                    $score -= 0.8;
+                }
+
+                if (($suitCounts[$suit] ?? 0) <= 1 && ($valueCounts[$value] ?? 0) <= 1) {
+                    $score -= 1.3;
+                }
+            }
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestCard = $candidate;
+            }
+        }
+
+        return $bestCard;
     }
 
     public function board(Request $request, int $roomId)
@@ -172,6 +480,10 @@ class CardGameController extends Controller
                 // Bloķē istabu un ielādē saistītos datus (spēlētāji, spēle, noteikumi)
                 $room = Room::with(['players', 'game', 'rules'])->lockForUpdate()->findOrFail($roomId);
 
+                $this->ensureMinimumPlayersWithBots($room);
+
+                $room->load('players');
+
                 // Pārbauda vai spēli drīkst sākt (piemēram, pietiek spēlētāju)
                 $this->validateStartConditions($room, $userId);
 
@@ -215,7 +527,12 @@ class CardGameController extends Controller
                 handCounts: $handCounts,
                 usedCards: $usedCards,
                 turnPlayerId: $turnId,
-                deckCount: $deckCount
+                deckCount: $deckCount,
+                players: $players->map(fn ($p) => [
+                    'id' => (int) $p->id,
+                    'name' => $p->name,
+                    'role' => $p->role,
+                ])->values()->toArray(),
             ));
 
             // Sinhronizē katra spēlētāja roku individuāli
@@ -231,6 +548,8 @@ class CardGameController extends Controller
                     turnPlayerId: $turnId,
                 ));
             }
+
+            $this->runBotTurns($game->room_id);
 
             // Atgriež veiksmīgu paziņojumu
             return redirect()->back()->with('success', 'Spēle sākta');
@@ -359,6 +678,8 @@ class CardGameController extends Controller
             turnPlayerId: $nextTurn,
             usedCards: $usedCards
         ))->toOthers();
+
+        $this->runBotTurns($roomIdOut);
 
         return response()->json([
             'hand'         => $hand,
@@ -505,6 +826,8 @@ class CardGameController extends Controller
             usedCards:    $game->used_cards ?? [],
         ))->toOthers();
 
+        $this->runBotTurns($game->room_id);
+
         return response()->json([
             'hand'         => $hand,
             'hand_counts'  => $handCounts,
@@ -560,6 +883,8 @@ class CardGameController extends Controller
             turnPlayerId: $game->current_turn,
             usedCards:    $game->used_cards ?? [],
         ))->toOthers();
+
+        $this->runBotTurns($game->room_id);
 
         return response()->json([
             'hand_counts'  => $handCounts,
