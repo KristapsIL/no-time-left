@@ -19,7 +19,6 @@ type Props = {
 
 export const GameControls: React.FC<Props> = ({
   isStartingGame,
-  connectedPlayers,
   isChatOpen,
   toggleChat,
   leaveGame,
