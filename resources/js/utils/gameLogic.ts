@@ -4,8 +4,23 @@ const splitCard = (code: string): [string, string] => {
   return [v ?? '', s ?? ''];
 };
 
-export const isValidPlay = (card: string, top: string | null): boolean => {
+/**
+ * Returns whether `card` is a legal play.
+ * When a pickup penalty is pending and stacking is enabled, only 2s may be played.
+ * When a penalty is pending and stacking is disabled, nothing may be played.
+ */
+export const isValidPlay = (
+  card: string,
+  top: string | null,
+  pickupPenalty = 0,
+  stackingActive = false,
+): boolean => {
   if (!top) return true;
+  if (pickupPenalty > 0) {
+    if (!stackingActive) return false;
+    const [cv] = splitCard(card);
+    return cv === '2'; // any 2 is valid when stacking
+  }
   const [cv, cs] = splitCard(card);
   const [tv, ts] = splitCard(top);
   return cv === tv || cs === ts;

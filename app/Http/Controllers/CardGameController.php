@@ -113,12 +113,57 @@ class CardGameController extends Controller
                 $difficulty = strtolower((string) ($room->rules?->bot_difficulty ?? 'medium'));
                 $roomRules = $room->rules?->rules ?? [];
                 $pickUpTillMatch = is_array($roomRules) && in_array('pick_up_till_match', $roomRules, true);
+                $plusTwoActive  = is_array($roomRules) && in_array('plus_two',  $roomRules, true);
+                $stackingActive = is_array($roomRules) && in_array('stacking',  $roomRules, true);
+                $penalty        = (int) ($game->pickup_penalty ?? 0);
 
                 if (!in_array($difficulty, ['easy', 'medium', 'hard'], true)) {
                     $difficulty = 'medium';
                 }
 
-                $playable = $this->chooseBotCard($hand, $topCard, $difficulty);
+                // ── Penalty: bot must either stack a 2 or draw ───────────────
+                if ($penalty > 0 && $plusTwoActive) {
+                    $twoCards = array_values(array_filter($hand, fn ($c) => explode('-', $c, 2)[0] === '2'));
+                    $willStack = $stackingActive && !empty($twoCards) && $difficulty !== 'easy';
+
+                    if ($willStack) {
+                        // Bot stacks — treat the chosen 2 as the playable card below
+                        $playable = $twoCards[0];
+                    } else {
+                        // Bot draws the penalty cards
+                        $deck = $game->deck ?? [];
+                        for ($j = 0; $j < $penalty; $j++) {
+                            $this->checkDeckAndReshuffle($deck, $game);
+                            if (count($deck) === 0) break;
+                            $drawn = array_shift($deck);
+                            $hand[] = $drawn;
+                        }
+                        $hands[$playerKey]    = $hand;
+                        $game->player_hands   = $hands;
+                        $game->deck           = array_values($deck);
+                        $game->pickup_penalty = 0;
+                        $nextTurn             = $this->nextPlayerId($room, $turnPlayerId);
+                        $game->current_turn   = $nextTurn;
+                        $game->has_picked_up  = false;
+                        $game->save();
+
+                        return [
+                            'kind'           => 'pass',
+                            'room_id'        => $game->room_id,
+                            'user_id'        => $turnPlayerId,
+                            'card'           => '',
+                            'used_cards'     => $game->used_cards ?? [],
+                            'hand_counts'    => collect($hands)->map(fn ($h) => count($h))->toArray(),
+                            'deck_count'     => count($game->deck ?? []),
+                            'turn'           => $game->current_turn,
+                            'finished'       => false,
+                            'winner_id'      => null,
+                            'pickup_penalty' => 0,
+                        ];
+                    }
+                } else {
+                    $playable = $this->chooseBotCard($hand, $topCard, $difficulty);
+                }
 
                 if ($playable !== null) {
                     $idx = array_search($playable, $hand, true);
@@ -133,27 +178,33 @@ class CardGameController extends Controller
                     $winnerId = $finished ? $turnPlayerId : null;
                     $nextTurn = $finished ? null : $this->nextPlayerId($room, $turnPlayerId);
 
-                    $game->player_hands = $hands;
-                    $game->used_cards = array_values($usedCards);
-                    $game->current_turn = $nextTurn;
-                    $game->has_picked_up = false;
-                    $game->game_status = $finished ? 'finished' : 'in_progress';
+                    // Update penalty after bot plays
+                    [$pVal] = $this->splitCard($playable);
+                    $newPenalty = ($plusTwoActive && $pVal === '2') ? $penalty + 2 : 0;
+
+                    $game->player_hands   = $hands;
+                    $game->used_cards     = array_values($usedCards);
+                    $game->current_turn   = $nextTurn;
+                    $game->has_picked_up  = false;
+                    $game->game_status    = $finished ? 'finished' : 'in_progress';
+                    $game->pickup_penalty = $finished ? 0 : $newPenalty;
                     if ($finished) {
                         $game->winner = $winnerId;
                     }
                     $game->save();
 
                     return [
-                        'kind'       => 'play',
-                        'room_id'    => $game->room_id,
-                        'user_id'    => $turnPlayerId,
-                        'card'       => $playable,
-                        'used_cards' => $game->used_cards,
-                        'hand_counts'=> collect($hands)->map(fn ($h) => count($h))->toArray(),
-                        'deck_count' => count($game->deck ?? []),
-                        'turn'       => $game->current_turn,
-                        'finished'   => $finished,
-                        'winner_id'  => $winnerId,
+                        'kind'           => 'play',
+                        'room_id'        => $game->room_id,
+                        'user_id'        => $turnPlayerId,
+                        'card'           => $playable,
+                        'used_cards'     => $game->used_cards,
+                        'hand_counts'    => collect($hands)->map(fn ($h) => count($h))->toArray(),
+                        'deck_count'     => count($game->deck ?? []),
+                        'turn'           => $game->current_turn,
+                        'finished'       => $finished,
+                        'winner_id'      => $winnerId,
+                        'pickup_penalty' => (int) $game->pickup_penalty,
                     ];
                 }
 
@@ -191,50 +242,57 @@ class CardGameController extends Controller
                     $winnerId = $finished ? $turnPlayerId : null;
                     $nextTurn = $finished ? null : $this->nextPlayerId($room, $turnPlayerId);
 
-                    $game->player_hands = $hands;
-                    $game->deck = array_values($deck);
-                    $game->used_cards = array_values($usedCards);
-                    $game->current_turn = $nextTurn;
-                    $game->has_picked_up = false;
-                    $game->game_status = $finished ? 'finished' : 'in_progress';
+                    [$dVal] = $this->splitCard($drawnPlayable);
+                    $newPenalty2 = ($plusTwoActive && $dVal === '2') ? 2 : 0;
+
+                    $game->player_hands   = $hands;
+                    $game->deck           = array_values($deck);
+                    $game->used_cards     = array_values($usedCards);
+                    $game->current_turn   = $nextTurn;
+                    $game->has_picked_up  = false;
+                    $game->game_status    = $finished ? 'finished' : 'in_progress';
+                    $game->pickup_penalty = $finished ? 0 : $newPenalty2;
                     if ($finished) {
                         $game->winner = $winnerId;
                     }
                     $game->save();
 
                     return [
-                        'kind'       => 'play',
-                        'room_id'    => $game->room_id,
-                        'user_id'    => $turnPlayerId,
-                        'card'       => $drawnPlayable,
-                        'used_cards' => $game->used_cards,
-                        'hand_counts'=> collect($hands)->map(fn ($h) => count($h))->toArray(),
-                        'deck_count' => count($game->deck ?? []),
-                        'turn'       => $game->current_turn,
-                        'finished'   => $finished,
-                        'winner_id'  => $winnerId,
+                        'kind'           => 'play',
+                        'room_id'        => $game->room_id,
+                        'user_id'        => $turnPlayerId,
+                        'card'           => $drawnPlayable,
+                        'used_cards'     => $game->used_cards,
+                        'hand_counts'    => collect($hands)->map(fn ($h) => count($h))->toArray(),
+                        'deck_count'     => count($game->deck ?? []),
+                        'turn'           => $game->current_turn,
+                        'finished'       => $finished,
+                        'winner_id'      => $winnerId,
+                        'pickup_penalty' => (int) $game->pickup_penalty,
                     ];
                 }
 
-                $game->player_hands = $hands;
-                $game->deck = array_values($deck);
+                $game->player_hands   = $hands;
+                $game->deck           = array_values($deck);
+                $game->pickup_penalty = 0; // drawing without stacking resets penalty
 
                 $nextTurn = $this->nextPlayerId($room, $turnPlayerId);
-                $game->current_turn = $nextTurn;
+                $game->current_turn  = $nextTurn;
                 $game->has_picked_up = false;
                 $game->save();
 
                 return [
-                    'kind'       => 'pass',
-                    'room_id'    => $game->room_id,
-                    'user_id'    => $turnPlayerId,
-                    'card'       => '',
-                    'used_cards' => $game->used_cards ?? [],
-                    'hand_counts'=> collect($game->player_hands ?? [])->map(fn ($h) => count($h))->toArray(),
-                    'deck_count' => count($game->deck ?? []),
-                    'turn'       => $game->current_turn,
-                    'finished'   => false,
-                    'winner_id'  => null,
+                    'kind'           => 'pass',
+                    'room_id'        => $game->room_id,
+                    'user_id'        => $turnPlayerId,
+                    'card'           => '',
+                    'used_cards'     => $game->used_cards ?? [],
+                    'hand_counts'    => collect($game->player_hands ?? [])->map(fn ($h) => count($h))->toArray(),
+                    'deck_count'     => count($game->deck ?? []),
+                    'turn'           => $game->current_turn,
+                    'finished'       => false,
+                    'winner_id'      => null,
+                    'pickup_penalty' => 0,
                 ];
             });
 
@@ -253,13 +311,14 @@ class CardGameController extends Controller
             }
 
             broadcast(new \App\Events\CardPlayed(
-                roomId: $action['room_id'],
-                userId: $action['user_id'],
-                card: $action['card'],
-                handCounts: $action['hand_counts'],
-                deckCount: $action['deck_count'],
-                turnPlayerId: $action['turn'],
-                usedCards: $action['used_cards'],
+                roomId:        $action['room_id'],
+                userId:        $action['user_id'],
+                card:          $action['card'],
+                handCounts:    $action['hand_counts'],
+                deckCount:     $action['deck_count'],
+                turnPlayerId:  $action['turn'],
+                usedCards:     $action['used_cards'],
+                pickupPenalty: (int) ($action['pickup_penalty'] ?? 0),
             ));
         }
     }
@@ -378,16 +437,17 @@ class CardGameController extends Controller
         $roomArray['code'] = $room->room_code; 
 
         return Inertia::render('cardgame/Board', [
-            'room'        => $roomArray,
-            'deck'        => array_values($game->deck ?? []),
-            'usedCards'   => array_values($game->used_cards ?? []),
-            'handCounts'  => $handCounts,
-            'myHand'      => array_values($myHand),
-            'gameStatus'  => $game->game_status,
-            'currentTurn' => $game->current_turn,
-            'winnerId'    => $game->winner,
-            'userId'      => $user->id,
-            'creatorId'   => $room->created_by,
+            'room'          => $roomArray,
+            'deck'          => array_values($game->deck ?? []),
+            'usedCards'     => array_values($game->used_cards ?? []),
+            'handCounts'    => $handCounts,
+            'myHand'        => array_values($myHand),
+            'gameStatus'    => $game->game_status,
+            'currentTurn'   => $game->current_turn,
+            'winnerId'      => $game->winner,
+            'userId'        => $user->id,
+            'creatorId'     => $room->created_by,
+            'pickupPenalty' => (int) ($game->pickup_penalty ?? 0),
         ]);
     }
 
@@ -405,12 +465,13 @@ class CardGameController extends Controller
                 abort(422, 'Game not initialized.');
             }
 
-            $game->player_hands = [];
-            $game->used_cards   = [];
-            $game->deck         = []; 
-            $game->current_turn = null;
-            $game->winner    = null;
-            $game->game_status  = 'waiting';
+            $game->player_hands  = [];
+            $game->used_cards    = [];
+            $game->deck          = []; 
+            $game->current_turn  = null;
+            $game->winner        = null;
+            $game->game_status   = 'waiting';
+            $game->pickup_penalty = 0;
             $game->save();
 
             broadcast(new \App\Events\GameReset($roomId));
@@ -442,7 +503,7 @@ class CardGameController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    protected function buildDeck(): array
+    protected function buildDeck(array $rules = []): array
     {
         $suits = ['♠', '♥', '♦', '♣'];
         $faces = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
@@ -452,6 +513,11 @@ class CardGameController extends Controller
             foreach ($faces as $face) {
                 $deck[] = $face . '-' . $suit;
             }
+        }
+
+        // Double deck rule: play with 104 cards
+        if (in_array('double_deck', $rules, true)) {
+            $deck = array_merge($deck, $deck);
         }
 
         return $deck;
@@ -526,7 +592,8 @@ class CardGameController extends Controller
                 $game = $room->game ?? new CardGame(['room_id' => $room->id]);
 
                 // Izveido un sajauc kāršu kavu
-                $deck = $this->buildDeck();
+                $rules = $room->rules?->rules ?? [];
+                $deck = $this->buildDeck($rules);
                 shuffle($deck);
 
                 // Nosaka kāršu skaitu katram spēlētājam (pēc noteikumiem vai noklusējuma)
@@ -611,9 +678,10 @@ class CardGameController extends Controller
             $deckCount,
             $nextTurn,
             $finished,
-            $winnerId
+            $winnerId,
+            $pickupPenalty,
         ] = DB::transaction(function () use ($roomId, $userId, $card) {
-            $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
+            $room = Room::with(['game', 'players', 'rules'])->lockForUpdate()->findOrFail($roomId);
             $game = $room->game;
 
             $this->ensureRoomMembership($room, $userId);
@@ -631,9 +699,25 @@ class CardGameController extends Controller
                 abort(422, 'Card not in hand');
             }
 
-            $usedArr = $game->used_cards ?? [];
-            $topCard = !empty($usedArr) ? end($usedArr) : null;
-            if ($topCard && !$this->isValidPlay($card, $topCard)) {
+            $usedArr  = $game->used_cards ?? [];
+            $topCard  = !empty($usedArr) ? end($usedArr) : null;
+            $roomRules = $room->rules?->rules ?? [];
+            $plusTwoActive  = in_array('plus_two',  $roomRules, true);
+            $stackingActive = in_array('stacking',  $roomRules, true);
+            $penalty        = (int) ($game->pickup_penalty ?? 0);
+
+            [$cValue] = $this->splitCard($card);
+
+            // Validate the play against penalty state
+            if ($penalty > 0) {
+                if (!$stackingActive) {
+                    abort(422, 'A penalty is pending — you must pick up cards.');
+                }
+                if ($cValue !== '2') {
+                    abort(422, 'You must play a 2 to stack, or pick up the penalty.');
+                }
+                // When stacking any 2 is valid (suit does not matter)
+            } elseif ($topCard && !$this->isValidPlay($card, $topCard)) {
                 abort(422, 'Invalid play');
             }
 
@@ -644,6 +728,15 @@ class CardGameController extends Controller
 
             $finished = count($hand) === 0;
             $winnerId = $finished ? $userId : null;
+
+            // Update pickup penalty
+            $newPenalty = $penalty;
+            if ($plusTwoActive && $cValue === '2') {
+                $newPenalty = $penalty + 2;
+            } elseif ($penalty === 0) {
+                $newPenalty = 0; // nothing to change
+            }
+            // If stacking a 2, penalty accumulated (already set above); do NOT reset.
 
             $nextTurn = null;
             if (!$finished) {
@@ -657,10 +750,11 @@ class CardGameController extends Controller
                 $game->has_picked_up = false;
             }
 
-            $game->player_hands = $hands;
-            $game->used_cards   = array_values($usedArr);
-            $game->current_turn = $finished ? null : $nextTurn;
-            $game->game_status  = $finished ? 'finished' : 'in_progress';
+            $game->player_hands   = $hands;
+            $game->used_cards     = array_values($usedArr);
+            $game->current_turn   = $finished ? null : $nextTurn;
+            $game->game_status    = $finished ? 'finished' : 'in_progress';
+            $game->pickup_penalty = $finished ? 0 : $newPenalty;
             if ($finished) {
                 $game->winner = $winnerId;
             }
@@ -678,17 +772,19 @@ class CardGameController extends Controller
                 $nextTurn,
                 $finished,
                 $winnerId,
+                (int) $game->pickup_penalty,
             ];
         });
 
         broadcast(new \App\Events\HandSynced(
-            roomId:       $roomIdOut,
-            userId:       $userId,
-            hand:         $hand,
-            handCounts:   $handCounts,
-            deckCount:    $deckCount,
-            usedCards:    $usedCards,
-            turnPlayerId: $finished ? null : $nextTurn,
+            roomId:        $roomIdOut,
+            userId:        $userId,
+            hand:          $hand,
+            handCounts:    $handCounts,
+            deckCount:     $deckCount,
+            usedCards:     $usedCards,
+            turnPlayerId:  $finished ? null : $nextTurn,
+            pickupPenalty: $pickupPenalty,
         ));
 
         if ($finished) {
@@ -705,24 +801,26 @@ class CardGameController extends Controller
         }
 
         broadcast(new \App\Events\CardPlayed(
-            roomId: $roomIdOut,
-            userId: $userId,
-            card: $card,
-            handCounts: $handCounts,
-            deckCount: $deckCount,
-            turnPlayerId: $nextTurn,
-            usedCards: $usedCards
+            roomId:        $roomIdOut,
+            userId:        $userId,
+            card:          $card,
+            handCounts:    $handCounts,
+            deckCount:     $deckCount,
+            turnPlayerId:  $nextTurn,
+            usedCards:     $usedCards,
+            pickupPenalty: $pickupPenalty,
         ))->toOthers();
 
         $this->runBotTurns($roomIdOut);
 
         return response()->json([
-            'hand'         => $hand,
-            'hand_counts'  => $handCounts,
-            'deck_count'   => $deckCount,
-            'used_cards'   => $usedCards,
-            'current_turn' => $nextTurn,
-            'game_status'  => $finished ? 'finished' : 'in_progress',
+            'hand'          => $hand,
+            'hand_counts'   => $handCounts,
+            'deck_count'    => $deckCount,
+            'used_cards'    => $usedCards,
+            'current_turn'  => $nextTurn,
+            'game_status'   => $finished ? 'finished' : 'in_progress',
+            'pickup_penalty' => $pickupPenalty,
         ], 200);
 
     }
@@ -770,7 +868,7 @@ class CardGameController extends Controller
         $userId = (int) $request->user()->id;
 
         [$game, $hand, $handCounts, $deckCount, $drawnCard] = DB::transaction(function () use ($roomId, $userId) {
-            $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
+            $room = Room::with(['game', 'players', 'rules'])->lockForUpdate()->findOrFail($roomId);
             $game = $room->game;
 
             $this->ensureRoomMembership($room, $userId);
@@ -779,11 +877,37 @@ class CardGameController extends Controller
                 abort(422, 'Not your turn or game not initialized.');
             }
 
-            $hands = $game->player_hands ?? [];
-            $deck  = $game->deck ?? [];
+            $hands      = $game->player_hands ?? [];
+            $deck       = $game->deck ?? [];
             $playerKey  = (string) $userId;
             $playerHand = $hands[$playerKey] ?? [];
-            $drawn = null; 
+            $roomRules  = $room->rules?->rules ?? [];
+            $plusTwoActive = in_array('plus_two', $roomRules, true);
+            $penalty    = (int) ($game->pickup_penalty ?? 0);
+
+            // ── Penalty draw: forced card pickup due to a +2 ─────────────────────
+            if ($penalty > 0 && $plusTwoActive) {
+                for ($i = 0; $i < $penalty; $i++) {
+                    $this->checkDeckAndReshuffle($deck, $game);
+                    if (count($deck) === 0) break;
+                    $drawn = array_shift($deck);
+                    $playerHand[] = $drawn;
+                }
+                $hands[$playerKey]    = $playerHand;
+                $game->player_hands   = $hands;
+                $game->deck           = array_values($deck);
+                $game->pickup_penalty = 0;
+                $nextTurn             = $this->nextPlayerId($room, $userId);
+                $game->current_turn   = $nextTurn;
+                $game->has_picked_up  = false;
+                $game->save();
+
+                $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
+                return [$game, $playerHand, $handCounts, count($deck), null];
+            }
+
+            $drawn  = null;
+            // ($deck, $playerKey, $playerHand are already declared above in the penalty branch)
 
             $this->checkDeckAndReshuffle($deck, $game);
 
@@ -866,34 +990,37 @@ class CardGameController extends Controller
 
         // Broadcast after commit with consistent data
         broadcast(new \App\Events\HandSynced(
-            roomId:       $game->room_id,
-            userId:       $userId,
-            hand:         $hand,
-            handCounts:   $handCounts,
-            deckCount:    $deckCount,
-            usedCards:    $game->used_cards ?? [],
-            turnPlayerId: $game->current_turn,
+            roomId:        $game->room_id,
+            userId:        $userId,
+            hand:          $hand,
+            handCounts:    $handCounts,
+            deckCount:     $deckCount,
+            usedCards:     $game->used_cards ?? [],
+            turnPlayerId:  $game->current_turn,
+            pickupPenalty: (int) ($game->pickup_penalty ?? 0),
         ));
 
         broadcast(new \App\Events\CardPlayed(
-            roomId:       $game->room_id,
-            userId:       $userId,
-            card:         '',
-            handCounts:   $handCounts,
-            deckCount:    $deckCount,
-            turnPlayerId: $game->current_turn,
-            usedCards:    $game->used_cards ?? [],
+            roomId:        $game->room_id,
+            userId:        $userId,
+            card:          '',
+            handCounts:    $handCounts,
+            deckCount:     $deckCount,
+            turnPlayerId:  $game->current_turn,
+            usedCards:     $game->used_cards ?? [],
+            pickupPenalty: (int) ($game->pickup_penalty ?? 0),
         ))->toOthers();
 
         $this->runBotTurns($game->room_id);
 
         return response()->json([
-            'hand'         => $hand,
-            'hand_counts'  => $handCounts,
-            'deck_count'   => $deckCount,
-            'used_cards'   => $game->used_cards ?? [],
-            'current_turn' => $game->current_turn,
-            'game_status'  => $game->game_status ?? 'in_progress',
+            'hand'           => $hand,
+            'hand_counts'    => $handCounts,
+            'deck_count'     => $deckCount,
+            'used_cards'     => $game->used_cards ?? [],
+            'current_turn'   => $game->current_turn,
+            'game_status'    => $game->game_status ?? 'in_progress',
+            'pickup_penalty' => (int) ($game->pickup_penalty ?? 0),
         ], 200);
     }
 
@@ -934,13 +1061,14 @@ class CardGameController extends Controller
         });
 
         broadcast(new \App\Events\CardPlayed(
-            roomId:       $game->room_id,
-            userId:       $userId,
-            card:         '',
-            handCounts:   $handCounts,
-            deckCount:    $deckCount,
-            turnPlayerId: $game->current_turn,
-            usedCards:    $game->used_cards ?? [],
+            roomId:        $game->room_id,
+            userId:        $userId,
+            card:          '',
+            handCounts:    $handCounts,
+            deckCount:     $deckCount,
+            turnPlayerId:  $game->current_turn,
+            usedCards:     $game->used_cards ?? [],
+            pickupPenalty: (int) ($game->pickup_penalty ?? 0),
         ))->toOthers();
 
         $this->runBotTurns($game->room_id);
@@ -972,12 +1100,13 @@ class CardGameController extends Controller
         $handCounts = collect($hands)->map(fn($h) => count($h))->toArray();
 
         return response()->json([
-            'hand'         => $hands[(string)$userId] ?? [],
-            'hand_counts'  => $handCounts,
-            'deck_count'   => count($game->deck ?? []),
-            'used_cards'   => $usedCards,
-            'current_turn' => $game->current_turn,
-            'game_status'  => $game->game_status,
+            'hand'           => $hands[(string)$userId] ?? [],
+            'hand_counts'    => $handCounts,
+            'deck_count'     => count($game->deck ?? []),
+            'used_cards'     => $usedCards,
+            'current_turn'   => $game->current_turn,
+            'game_status'    => $game->game_status,
+            'pickup_penalty' => (int) ($game->pickup_penalty ?? 0),
         ]);
     }
 }

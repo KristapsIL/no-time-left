@@ -26,6 +26,7 @@ export type GameState = {
   currentTurn: number | null;
   status: 'waiting' | 'in_progress' | 'finished';
   winnerId: number | null | undefined;
+  pickupPenalty: number;
 };
 
 export type FlyingCard = { card: string; from: 'player' | 'bot' | 'peer' };
@@ -40,7 +41,7 @@ type PresenceMember = { id: number; name?: string };
 export type GameEngineInput = {
   room: {
     id: number;
-    rules: { turn_timeout_seconds?: number };
+    rules: { turn_timeout_seconds?: number; rules?: string[] };
     players?: Player[];
   };
   userId: number;
@@ -51,6 +52,7 @@ export type GameEngineInput = {
   initialGameStatus: 'waiting' | 'in_progress' | 'finished';
   initialCurrentTurn: number | null;
   initialWinnerId: number | null | undefined;
+  initialPickupPenalty: number;
   toast: { error: (msg: string) => void };
 };
 
@@ -89,10 +91,12 @@ export function useGameEngine({
   initialGameStatus,
   initialCurrentTurn,
   initialWinnerId,
+  initialPickupPenalty,
   toast,
 }: GameEngineInput) {
   const uid = String(userId);
   const turnTimeoutSeconds = room.rules.turn_timeout_seconds ?? 5;
+  const stackingActive = Array.isArray(room.rules.rules) && room.rules.rules.includes('stacking');
 
   // ── Game state ──────────────────────────────────────────────────────────
   const [game, dispatch] = useReducer(gameReducer, {
@@ -103,6 +107,7 @@ export function useGameEngine({
     currentTurn: initialCurrentTurn,
     status: initialGameStatus,
     winnerId: initialWinnerId,
+    pickupPenalty: initialPickupPenalty,
   });
 
   // ── UI / animation state ────────────────────────────────────────────────
@@ -321,8 +326,8 @@ export function useGameEngine({
       !isBotActionPending &&
       !turnExpiredRef.current &&
       turnTimeLeft > 0 &&
-      isValidPlay(card, gameRef.current.topCard),
-    [isMyTurn, turnTimeLeft, isPlacementLocked, isBotActionPending, showDrawnPlayOption],
+      isValidPlay(card, gameRef.current.topCard, gameRef.current.pickupPenalty, stackingActive),
+    [isMyTurn, turnTimeLeft, isPlacementLocked, isBotActionPending, showDrawnPlayOption, stackingActive],
   );
 
   const onPlay = useCallback(
@@ -493,6 +498,7 @@ export function useGameEngine({
         if (used.length) patch.topCard = used[used.length - 1];
         if (eventHC) patch.handCounts = eventHC;
         if (typeof eventDC === 'number') patch.deckCount = eventDC;
+        if (typeof (data as any).pickup_penalty === 'number') patch.pickupPenalty = (data as any).pickup_penalty;
         if (Object.keys(patch).length) dispatch({ type: 'SERVER_SYNC', payload: patch });
         if (eventTurn !== null) dispatch({ type: 'SET_TURN', turn: eventTurn });
       };
@@ -551,6 +557,7 @@ export function useGameEngine({
             handCounts: (d.hand_counts ?? d.handCounts) ?? gameRef.current.handCounts,
             deckCount: dc,
             topCard: ((d.used_cards ?? d.usedCards) ?? []).at(-1) ?? gameRef.current.topCard,
+            pickupPenalty: typeof (d as any).pickup_penalty === 'number' ? (d as any).pickup_penalty : gameRef.current.pickupPenalty,
           },
         });
         if (turn !== null) dispatch({ type: 'SET_TURN', turn });
@@ -570,15 +577,26 @@ export function useGameEngine({
           : typeof d.winnerId === 'number'
             ? d.winnerId
             : null;
-      dispatch({
-        type: 'SERVER_SYNC',
-        payload: {
-          status: 'finished',
-          winnerId: winner,
-          handCounts: (d.hand_counts ?? d.handCounts) ?? gameRef.current.handCounts,
-        },
-      });
-      dispatch({ type: 'SET_TURN', turn: null });
+
+      const applyFinish = () => {
+        dispatch({
+          type: 'SERVER_SYNC',
+          payload: {
+            status: 'finished',
+            winnerId: winner,
+            handCounts: (d.hand_counts ?? d.handCounts) ?? gameRef.current.handCounts,
+          },
+        });
+        dispatch({ type: 'SET_TURN', turn: null });
+      };
+
+      // Wait for any pending bot animations before showing the modal
+      const remaining = botActionAvailableAtRef.current - Date.now();
+      if (remaining > 0) {
+        window.setTimeout(applyFinish, remaining + 200);
+      } else {
+        applyFinish();
+      }
     };
 
     const onGameReset = () => {
@@ -592,6 +610,7 @@ export function useGameEngine({
           hand: [],
           handCounts: {},
           currentTurn: null,
+          pickupPenalty: 0,
         },
       });
     };
@@ -630,6 +649,7 @@ export function useGameEngine({
             deckCount: typeof data.deck_count === 'number' ? data.deck_count : gameRef.current.deckCount,
             topCard: (data.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
             status: data.game_status ?? gameRef.current.status,
+            pickupPenalty: typeof data.pickup_penalty === 'number' ? data.pickup_penalty : gameRef.current.pickupPenalty,
           },
         });
         dispatch({ type: 'SET_TURN', turn: data.current_turn ?? null });

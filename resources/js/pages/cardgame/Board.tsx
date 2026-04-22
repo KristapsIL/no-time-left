@@ -10,6 +10,7 @@ import { CenterTable } from '@/components/Board/CenterTable';
 import { GameOverModal } from '@/components/Board/GameOverModal';
 import { WaitingLobby } from '@/components/Board/WaitingLobby';
 import { OpponentHandRail } from '@/components/Board/OpponentHandRail';
+import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { useGameEngine, type PlayerLite } from '@/hooks/useGameEngine';
 import { useToast } from '@/hooks/useToast';
 
@@ -41,6 +42,7 @@ type Props = {
   winnerId?: number | null;
   userId: number;
   creatorId?: number;
+  pickupPenalty?: number;
 };
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
@@ -53,9 +55,10 @@ const OpponentLabel = ({
   count: number;
   overflow?: PlayerLite[];
 }) => (
-  <div className="flex items-center gap-2">
-    <span className="opacity-90">{player.name ?? `Player ${player.id}`}</span>
-    <span className="bg-black/40 rounded px-1.5 py-0.5">{count}</span>
+  <div className="flex items-center gap-1.5">
+    <PlayerAvatar id={player.id} name={player.name} size={20} />
+    <span className="opacity-90 truncate max-w-[70px]">{player.name ?? `Player ${player.id}`}</span>
+    <span className="bg-black/40 rounded px-1 py-0.5">{count}</span>
     {overflow && overflow.length > 0 && (
       <span title={overflow.map((p) => p.name ?? p.id).join(', ')}>
         +{overflow.length}
@@ -64,7 +67,7 @@ const OpponentLabel = ({
   </div>
 );
 
-/** Compact card-fan + name badge for all opponents on mobile */
+/** Compact arc-fan + name badge for each opponent on mobile */
 const MobileOpponentFan = memo(function MobileOpponentFan({
   player,
   count,
@@ -74,28 +77,71 @@ const MobileOpponentFan = memo(function MobileOpponentFan({
   count: number;
   isTurn: boolean;
 }) {
-  const MAX_SHOW = 4;
-  const CW = 40, CH = 57, STEP = 7;
+  const MAX_SHOW = 5;
+  const CW = 36, CH = 52, ARC_R = 44;
   const show = Math.max(1, Math.min(count, MAX_SHOW));
+  const totalDeg = Math.min(50, (show - 1) * 12);
+  const startDeg = -totalDeg / 2;
+  const step = show > 1 ? totalDeg / (show - 1) : 0;
+
+  // Container wide enough to hold the fanned cards without clipping
+  const halfSpread = Math.round((CH + ARC_R) * Math.sin((totalDeg / 2) * (Math.PI / 180))) + 2;
+  const containerW = CW + halfSpread * 2 + 4;
+  const containerH = CH + 8;
+
   return (
     <div
       className={[
-        'flex flex-col items-center gap-1 px-2 pt-2 pb-1.5 rounded-xl transition',
-        isTurn ? 'bg-yellow-400/15 ring-1 ring-yellow-400/60' : 'bg-black/20',
+        'flex flex-col items-center gap-0.5 px-2 pt-1.5 pb-1.5 rounded-xl transition select-none',
+        isTurn
+          ? 'bg-yellow-400/20 ring-2 ring-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.35)]'
+          : 'bg-black/20',
       ].join(' ')}
     >
-      {/* Fanned card backs */}
-      <div className="relative" style={{ width: CW + (show - 1) * STEP, height: CH + (show - 1) * STEP }}>
-        {Array.from({ length: show }, (_, i) => (
-          <div key={i} className="absolute" style={{ top: i * STEP, left: i * STEP, zIndex: i }}>
-            <CardBack width={CW} height={CH} fillColor="#1f2937" bandColor="#0ea5e9" rimColor="rgba(0,0,0,0.35)" label="" />
-          </div>
-        ))}
-      </div>
-      <span className={`text-[10px] font-medium truncate max-w-[72px] ${isTurn ? 'text-yellow-300' : 'text-white/70'}`}>
+      {/* Name ABOVE fan */}
+      <span
+        className={`text-[10px] font-semibold truncate max-w-[80px] leading-none ${
+          isTurn ? 'text-yellow-300' : 'text-white/70'
+        }`}
+      >
         {player.name ?? `P${player.id}`}
       </span>
-      <span className={`text-[10px] font-bold tabular-nums ${isTurn ? 'text-yellow-400' : 'text-white/40'}`}>
+
+      {/* Arc fan */}
+      <div className="relative" style={{ width: containerW, height: containerH }}>
+        {Array.from({ length: show }, (_, i) => {
+          const angle = startDeg + i * step;
+          return (
+            <div
+              key={i}
+              style={{
+                position: 'absolute',
+                left: containerW / 2 - CW / 2,
+                top: 0,
+                zIndex: i,
+                transform: `rotate(${angle}deg)`,
+                transformOrigin: `${CW / 2}px ${CH + ARC_R}px`,
+              }}
+            >
+              <CardBack
+                width={CW}
+                height={CH}
+                fillColor="#1e3a5f"
+                bandColor="#0ea5e9"
+                rimColor="rgba(0,0,0,0.45)"
+                label=""
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Card count below */}
+      <span
+        className={`text-[10px] font-bold tabular-nums leading-none ${
+          isTurn ? 'text-yellow-400' : 'text-white/40'
+        }`}
+      >
         {count}
       </span>
     </div>
@@ -105,7 +151,7 @@ const MobileOpponentFan = memo(function MobileOpponentFan({
 // ── Board ─────────────────────────────────────────────────────────────────────
 export default function Board() {
   const { props } = usePage<Props>();
-  const { room, deck, usedCards, handCounts, myHand, gameStatus, currentTurn, winnerId, userId, creatorId } = props;
+  const { room, deck, usedCards, handCounts, myHand, gameStatus, currentTurn, winnerId, userId, creatorId, pickupPenalty } = props;
   const toast = useToast();
   const isCreator = userId === (creatorId ?? room.created_by ?? -1);
 
@@ -150,13 +196,14 @@ export default function Board() {
     initialGameStatus: gameStatus ?? 'waiting',
     initialCurrentTurn: currentTurn ?? null,
     initialWinnerId: winnerId ?? null,
+    initialPickupPenalty: pickupPenalty ?? 0,
     toast,
   });
 
-  // ── Collect all opponents for mobile strip ──────────────────────────────
+  // ── Collect all opponents for mobile strip (in turn order: left → top → right) ──
   const allMobileOpponents: Array<{ seat: PlayerLite; count: number }> = [
-    ...(seats.top   ? [{ seat: seats.top,   count: topCount   }] : []),
     ...(seats.left  ? [{ seat: seats.left,  count: leftCount  }] : []),
+    ...(seats.top   ? [{ seat: seats.top,   count: topCount   }] : []),
     ...(seats.right ? [{ seat: seats.right, count: rightCount }] : []),
     ...(seats.overflow ?? []).map((s) => ({ seat: s, count: game.handCounts[String(s.id)] ?? 0 })),
   ];
@@ -196,16 +243,20 @@ export default function Board() {
         "
       >
         {/* ── Row 1: Opponents ────────────────────────────────────────── */}
-        {/* Mobile: all opponents as compact card fans in one strip */}
-        <div className="md:hidden row-start-1 col-start-1 flex items-end justify-center gap-3 px-2 pt-1 flex-wrap min-h-[110px]">
+        {/* Mobile: all opponents as compact arc fans in one strip (turn order) */}
+        <div className="md:hidden row-start-1 col-start-1 flex items-end justify-center gap-1.5 px-2 pt-1 flex-wrap min-h-[110px]">
           {allMobileOpponents.length > 0 ? (
-            allMobileOpponents.map(({ seat, count }) => (
-              <MobileOpponentFan
-                key={seat.id}
-                player={seat}
-                count={count}
-                isTurn={isSeatTurn(seat.id)}
-              />
+            allMobileOpponents.map(({ seat, count }, idx) => (
+              <React.Fragment key={seat.id}>
+                {idx > 0 && (
+                  <span className="text-white/25 text-[10px] self-center pb-3">›</span>
+                )}
+                <MobileOpponentFan
+                  player={seat}
+                  count={count}
+                  isTurn={isSeatTurn(seat.id)}
+                />
+              </React.Fragment>
             ))
           ) : (
             <div className="opacity-60 text-sm self-center">Waiting for players…</div>
@@ -227,7 +278,7 @@ export default function Board() {
         </div>
 
         {/* ── Desktop Left ─────────────────────────────────────────────── */}
-        <div className="hidden md:flex row-start-2 col-start-1 min-w-0 items-center justify-center">
+        <div className="hidden md:flex row-start-2 col-start-1 min-w-0 items-start justify-center overflow-visible">
           {seats.left ? (
             <OpponentHandRail
               side="left"
@@ -259,7 +310,7 @@ export default function Board() {
         </div>
 
         {/* ── Desktop Right ────────────────────────────────────────────── */}
-        <div className="hidden md:flex row-start-2 col-start-3 min-w-0 items-center justify-center">
+        <div className="hidden md:flex row-start-2 col-start-3 min-w-0 items-start justify-center overflow-visible">
           {seats.right ? (
             <OpponentHandRail
               side="right"
@@ -275,6 +326,21 @@ export default function Board() {
         {/* ── Bottom: hand + controls ───────────────────────────────────── */}
         <div className="row-start-3 col-span-1 md:col-span-3 flex flex-col items-center gap-2 pb-1 md:pb-0">
           <div className="relative w-full flex flex-col items-center">
+            {/* Pickup penalty badge */}
+            {game.pickupPenalty > 0 && (
+              <div
+                className={[
+                  'mb-1 px-3 py-1 rounded-lg text-sm font-bold border',
+                  isMyTurn
+                    ? 'bg-red-500/25 border-red-500/60 text-red-300 animate-pulse'
+                    : 'bg-red-500/10 border-red-500/30 text-red-400/80',
+                ].join(' ')}
+              >
+                {isMyTurn
+                  ? `⚠ Pick up +${game.pickupPenalty} cards!`
+                  : `⚠ Pending +${game.pickupPenalty}`}
+              </div>
+            )}
             {showDrawnPlayOption && drawnCards.length > 0 && (
               <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-1">
                 <button

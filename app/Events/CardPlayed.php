@@ -18,6 +18,7 @@ class CardPlayed implements ShouldBroadcastNow
     public array $handCounts;   // NEW
     public ?int $turnPlayerId;   // NEW
     public int $deckCount;      // NEW
+    public int $pickupPenalty;  // NEW
 
     public function __construct(
         int $roomId,
@@ -26,7 +27,8 @@ class CardPlayed implements ShouldBroadcastNow
         array $usedCards,
         array $handCounts,
         ?int $turnPlayerId,
-        int $deckCount
+        int $deckCount,
+        int $pickupPenalty = 0
     ) {
         $this->roomId = $roomId;
         $this->userId = $userId;
@@ -35,6 +37,7 @@ class CardPlayed implements ShouldBroadcastNow
         $this->handCounts = $handCounts;
         $this->turnPlayerId = $turnPlayerId;
         $this->deckCount = $deckCount;
+        $this->pickupPenalty = $pickupPenalty;
     }
 
     public function broadcastOn()
@@ -50,12 +53,13 @@ class CardPlayed implements ShouldBroadcastNow
     public function broadcastWith(): array
     {
         return [
-            'player_id'     => $this->userId,
-            'card'          => $this->card,
-            'used_cards'    => $this->usedCards,
-            'hand_counts'   => $this->handCounts,
-            'turn_player_id'=> $this->turnPlayerId,
-            'deck_count'    => $this->deckCount,
+            'player_id'      => $this->userId,
+            'card'           => $this->card,
+            'used_cards'     => $this->usedCards,
+            'hand_counts'    => $this->handCounts,
+            'turn_player_id' => $this->turnPlayerId,
+            'deck_count'     => $this->deckCount,
+            'pickup_penalty' => $this->pickupPenalty,
         ];
     }
 }

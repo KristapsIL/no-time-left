@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class CardGame extends Model
 {
     protected $fillable = [
-        'room_id', 'game_status', 'player_hands', 'game_started_at','deck', 'used_cards', 'current_turn', 'has_picked_up', 'winner'
+        'room_id', 'game_status', 'player_hands', 'game_started_at','deck', 'used_cards', 'current_turn', 'has_picked_up', 'pickup_penalty', 'winner'
     ];
 
     protected $casts = [
@@ -15,6 +15,7 @@ class CardGame extends Model
         'player_hands' => 'array',
         'used_cards' => 'array',
         'game_started_at' => 'datetime',
+        'pickup_penalty' => 'integer',
     ];
 
     public function room(){

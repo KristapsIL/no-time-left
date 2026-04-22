@@ -62,15 +62,20 @@ export const CardBack: React.FC<Props> = ({
       aria-label="Card back"
       draggable={false}
     >
-      {/* Base fill (main back color) + subtle diagonal highlight */}
+      {/* Base fill (main back color) — solid so no transparency */}
       <div
         className="absolute inset-0"
         style={{
           borderRadius: radius,
-          background: `
-            linear-gradient(135deg, ${fillColor} 0%, ${fillColor} 55%),
-            linear-gradient(120deg, rgba(255,255,255,0.12), rgba(255,255,255,0) 45%)
-          `,
+          backgroundColor: fillColor,
+        }}
+      />
+      {/* Subtle diagonal highlight overlay */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          borderRadius: radius,
+          backgroundImage: `linear-gradient(120deg, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0) 45%)`,
         }}
       />
 

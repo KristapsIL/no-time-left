@@ -19,6 +19,7 @@ class HandSynced implements ShouldBroadcastNow
         public ?int $deckCount = null,
         public ?array $usedCards = null,
         public ?int $turnPlayerId = null,
+        public int $pickupPenalty = 0,
     ) {}
 
     public function broadcastOn(): PresenceChannel
@@ -41,6 +42,7 @@ class HandSynced implements ShouldBroadcastNow
             'deck_count'     => $this->deckCount,
             'used_cards'     => $this->usedCards,
             'turn_player_id' => $this->turnPlayerId,
+            'pickup_penalty' => $this->pickupPenalty,
         ];
     }
 }
