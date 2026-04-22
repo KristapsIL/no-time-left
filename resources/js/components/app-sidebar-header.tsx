@@ -35,7 +35,7 @@ export function AppSidebarHeader({
   iconSize = 22,
   includeSafeArea = false // turn off safe-area by default to be truly flush
 }: Props) {
-  const { open } = useSidebar?.() ?? { open: false };
+  const { open, toggleSidebar } = useSidebar?.() ?? { open: false, toggleSidebar: () => {} };
 
   // Translate distance to “ride” the panel edge
   const base = open
@@ -54,9 +54,10 @@ const inlineEnd = (includeSafeArea && isMobile)
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 pointer-events-none" aria-label="App header">
+      {/* Desktop trigger: rides the sidebar edge */}
       <SidebarTrigger
         className={[
-          'pointer-events-auto fixed inline-flex items-center gap-2 rounded-full',
+          'pointer-events-auto fixed hidden md:inline-flex items-center gap-2 rounded-full',
           'bg-black/70 hover:bg-black/85 text-white shadow-lg ring-1 ring-white/20',
           'backdrop-blur transition focus:outline-none focus-visible:ring-2',
           'focus-visible:ring-yellow-400',
@@ -82,6 +83,34 @@ const inlineEnd = (includeSafeArea && isMobile)
         </svg>
         <span className="text-sm font-medium">Menu</span>
       </SidebarTrigger>
+
+      {/* Mobile trigger: fixed bottom-right */}
+      <button
+        type="button"
+        onClick={toggleSidebar}
+        className={[
+          'md:hidden pointer-events-auto fixed inline-flex items-center gap-2 rounded-full',
+          'bg-black/70 hover:bg-black/85 text-white shadow-lg ring-1 ring-white/20',
+          'backdrop-blur transition focus:outline-none focus-visible:ring-2',
+          'focus-visible:ring-yellow-400 px-4 py-3',
+        ].join(' ')}
+        style={{
+          bottom: `calc(env(safe-area-inset-bottom, 0px) + 20px)`,
+          right: '16px',
+        }}
+        aria-label={open ? 'Close menu' : 'Open menu'}
+      >
+        <svg
+          width={iconSize}
+          height={iconSize}
+          viewBox="0 0 24 24"
+          fill="none"
+          className="opacity-90"
+        >
+          <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+        <span className="text-sm font-medium">Menu</span>
+      </button>
 
       <div className="sr-only">
         <Breadcrumbs breadcrumbs={breadcrumbs} />

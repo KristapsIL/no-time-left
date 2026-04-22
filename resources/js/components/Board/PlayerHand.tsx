@@ -66,6 +66,140 @@ export const PlayerHand: React.FC<Props> = React.memo(
       return () => window.removeEventListener('resize', onResize);
     }, []);
 
+    // ── Draw animation: detect newly added cards ──────────────────────────
+    const prevHandRef = useRef<string[]>(hand);
+    const [newCardAnimData, setNewCardAnimData] = useState<Map<number, number>>(new Map()); // index → stagger order
+    const clearAnimTimerRef = useRef<number | null>(null);
+
+    // Inject CSS keyframe once
+    useEffect(() => {
+      const id = 'deal-card-kf';
+      if (!document.getElementById(id)) {
+        const s = document.createElement('style');
+        s.id = id;
+        s.textContent = `@keyframes dealCard{from{opacity:0;transform:translateY(22px) scale(.9)}to{opacity:1;transform:translateY(0) scale(1)}}`;
+        document.head.appendChild(s);
+      }
+    }, []);
+
+    useLayoutEffect(() => {
+      const prev = prevHandRef.current;
+      prevHandRef.current = hand;
+
+      if (hand.length > prev.length) {
+        // Find newly added card indices
+        const counts = new Map<string, number>();
+        for (const c of prev) counts.set(c, (counts.get(c) ?? 0) + 1);
+
+        const addedIndices: number[] = [];
+        for (let i = 0; i < hand.length; i++) {
+          const c = hand[i];
+          const cnt = counts.get(c) ?? 0;
+          if (cnt === 0) {
+            addedIndices.push(i);
+          } else {
+            counts.set(c, cnt - 1);
+          }
+        }
+
+        if (addedIndices.length > 0) {
+          const animMap = new Map<number, number>();
+          addedIndices.forEach((handIdx, order) => animMap.set(handIdx, order));
+          setNewCardAnimData(animMap);
+
+          if (clearAnimTimerRef.current !== null) window.clearTimeout(clearAnimTimerRef.current);
+          clearAnimTimerRef.current = window.setTimeout(() => {
+            setNewCardAnimData(new Map());
+            clearAnimTimerRef.current = null;
+          }, addedIndices.length * 260 + 600);
+        }
+      } else if (hand.length < prev.length) {
+        setNewCardAnimData(new Map());
+        if (clearAnimTimerRef.current !== null) {
+          window.clearTimeout(clearAnimTimerRef.current);
+          clearAnimTimerRef.current = null;
+        }
+      }
+    }, [hand]);
+
+    // ── Mobile card constants ─────────────────────────────────────────────
+    const MOBILE_CARD_W = 70;
+    const MOBILE_CARD_H = 104;
+    const MOBILE_LIFT_PX = 46;
+
+    // Absolute X positions so all cards fit in the container, no scroll
+    const mobilePositions = useMemo(() => {
+      const n = hand.length;
+      if (n === 0) return [];
+      const containerW = mobileSize.width || 320;
+      const minStep = 14;
+      const maxStep = MOBILE_CARD_W - 2;
+      const step = n > 1
+        ? clamp((containerW - MOBILE_CARD_W) / (n - 1), minStep, maxStep)
+        : 0;
+      return Array.from({ length: n }, (_, i) => i * step);
+    }, [hand.length, mobileSize.width]);
+
+    // ── Mobile drag-to-play (no scroll, immediate capture) ────────────────
+    const [dragIdx, setDragIdx] = useState<number | null>(null);
+
+    const computeCardIdxFromX = useCallback(
+      (clientX: number) => {
+        const container = mobileRef.current;
+        if (!container || mobilePositions.length === 0) return null;
+        const rect = container.getBoundingClientRect();
+        const relX = clientX - rect.left;
+        // Find card whose centre is nearest to touch point
+        let best = 0;
+        let bestDist = Infinity;
+        for (let i = 0; i < mobilePositions.length; i++) {
+          const centre = mobilePositions[i] + MOBILE_CARD_W / 2;
+          const dist = Math.abs(relX - centre);
+          if (dist < bestDist) { bestDist = dist; best = i; }
+        }
+        return best;
+      },
+      [mobilePositions]
+    );
+
+    const onMobilePointerDown = useCallback(
+      (e: React.PointerEvent<HTMLDivElement>) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setDragIdx(computeCardIdxFromX(e.clientX));
+      },
+      [computeCardIdxFromX]
+    );
+
+    const onMobilePointerMove = useCallback(
+      (e: React.PointerEvent<HTMLDivElement>) => {
+        setDragIdx(computeCardIdxFromX(e.clientX));
+      },
+      [computeCardIdxFromX]
+    );
+
+    const onMobilePointerUp = useCallback(
+      (e: React.PointerEvent<HTMLDivElement>) => {
+        const playIdx = computeCardIdxFromX(e.clientX);
+        setDragIdx(null);
+        if (playIdx !== null && isMyTurn) {
+          const card = hand[playIdx];
+          if (card && isValidPlay(card, topCard)) playCard(card);
+        }
+      },
+      [computeCardIdxFromX, hand, isMyTurn, topCard, playCard]
+    );
+
+    const onMobilePointerCancel = useCallback(() => setDragIdx(null), []);
+
+    // Cleanup on unmount
+    useEffect(
+      () => () => {
+        if (clearAnimTimerRef.current !== null) window.clearTimeout(clearAnimTimerRef.current);
+      },
+      []
+    );
+
+    // ── Layout math ───────────────────────────────────────────────────────
     const {
       positions,
       needsScroll,
@@ -126,17 +260,6 @@ export const PlayerHand: React.FC<Props> = React.memo(
       [playCard]
     );
 
-    const mobileOverlapPx = useMemo(() => {
-      const n = hand.length;
-      if (n <= 1) return 0;
-      const cardW = 104;
-      const avail = Math.max(0, mobileSize.width - 24);
-      const minStep = Math.round(cardW * 0.35);
-      const maxStep = cardW;
-      const fitStep = clamp(Math.floor((avail - cardW) / Math.max(1, n - 1)), minStep, maxStep);
-      return clamp(cardW - fitStep, Math.round(cardW * 0.15), Math.round(cardW * 0.85));
-    }, [hand.length, mobileSize.width]);
-
     return (
       <div className="w-full select-none">
         {/* Desktop */}
@@ -181,6 +304,11 @@ export const PlayerHand: React.FC<Props> = React.memo(
 
                     const clampedCenter = clamp(x + nudge, leftCenterBound, rightCenterBound);
 
+                    const staggerOrder = newCardAnimData.get(idx) ?? -1;
+                    const dealStyle: React.CSSProperties = staggerOrder >= 0
+                      ? { animation: 'dealCard 300ms ease-out both', animationDelay: `${staggerOrder * 260}ms` }
+                      : {};
+
                     return (
                       <div
                         key={`${card}-${idx}`}
@@ -210,7 +338,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
                               ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-emerald-900 cursor-pointer focus:ring-2 focus:ring-yellow-300'
                               : ' cursor-not-allowed',
                           ].join(' ')}
-                          style={{ width: cardSize.w, height: cardSize.h }}
+                          style={{ width: cardSize.w, height: cardSize.h, ...dealStyle }}
                           tabIndex={canPlay ? 0 : -1}
                           onKeyDown={(e) => onKeyPlay(e, canPlay, card)}
                           aria-disabled={!canPlay}
@@ -225,42 +353,56 @@ export const PlayerHand: React.FC<Props> = React.memo(
           </div>
         </div>
 
-        {/* Mobile */}
+        {/* Mobile — fan layout, all cards visible, no scroll */}
         <div
           ref={mobileRef}
-          className="sm:hidden flex items-end overflow-x-auto px-4 pt-2 pb-[max(env(safe-area-inset-bottom),12px)] gap-1 snap-x snap-mandatory"
+          className="sm:hidden relative w-full select-none"
+          style={{
+            height: MOBILE_CARD_H + MOBILE_LIFT_PX + 8,
+            touchAction: 'none',
+            paddingBottom: 'max(env(safe-area-inset-bottom), 4px)',
+          }}
+          onPointerDown={onMobilePointerDown}
+          onPointerMove={onMobilePointerMove}
+          onPointerUp={onMobilePointerUp}
+          onPointerCancel={onMobilePointerCancel}
           role="listbox"
           aria-label="Your hand"
         >
           {hand.map((card, idx) => {
             const canPlay = isMyTurn && isValidPlay(card, topCard);
+            const isLifted = dragIdx === idx;
+
+            const staggerOrder = newCardAnimData.get(idx) ?? -1;
+            const dealStyle: React.CSSProperties = staggerOrder >= 0
+              ? { animation: 'dealCard 300ms ease-out both', animationDelay: `${staggerOrder * 260}ms` }
+              : {};
+
             return (
               <div
-                key={`${card}-${idx}`}
-                className="shrink-0 snap-start first:ml-0"
-                style={{ marginLeft: idx === 0 ? 0 : -mobileOverlapPx }}
+                key={`m-${card}-${idx}`}
+                className="absolute bottom-0 transition-transform duration-100 ease-out"
+                style={{
+                  left: mobilePositions[idx] ?? 0,
+                  zIndex: 100 + idx + (isLifted ? 1000 : 0),
+                  transform: isLifted ? `translateY(-${MOBILE_LIFT_PX}px)` : 'none',
+                }}
               >
                 <CardView
                   card={card}
-                  disabled={!canPlay}
-                  selected={false}
-                  onClick={() => {
-                    if (canPlay) playCard(card);
-                  }}
+                  disabled={false}
+                  selected={isLifted}
                   className={[
-                    'shadow-md transition-transform active:-translate-y-1',
-                    canPlay
-                      ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-emerald-900 cursor-pointer focus:ring-2 focus:ring-yellow-300'
-                      : 'opacity-95 cursor-not-allowed',
+                    'shadow-md pointer-events-none',
+                    isLifted && canPlay
+                      ? 'ring-2 ring-yellow-400 ring-offset-1 ring-offset-emerald-900'
+                      : isLifted
+                      ? 'ring-2 ring-white/50 ring-offset-1'
+                      : canPlay
+                      ? 'ring-1 ring-yellow-400/40'
+                      : 'opacity-90',
                   ].join(' ')}
-                  style={{ width: 104, height: 150 }}
-                  tabIndex={canPlay ? 0 : -1}
-                  onKeyDown={(e) => {
-                    if ((e.key === 'Enter' || e.key === ' ') && canPlay) {
-                      e.preventDefault();
-                      playCard(card);
-                    }
-                  }}
+                  style={{ width: MOBILE_CARD_W, height: MOBILE_CARD_H, ...dealStyle }}
                   aria-disabled={!canPlay}
                 />
               </div>

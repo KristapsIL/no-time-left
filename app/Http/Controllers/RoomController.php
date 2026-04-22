@@ -23,7 +23,7 @@ class RoomController extends Controller
             'public'                => ['required', 'boolean'],
             'max_players'           => ['required', 'integer', 'min:2', 'max:4'],
             'turn_timeout_seconds'  => ['nullable', 'integer', 'min:2', 'max:60'],
-            'bot_fill_count'        => ['nullable', 'integer', 'min:0', 'max:3'],
+            'bot_fill_count'        => ['nullable', 'integer', 'min:0', 'max:4'],
             'bot_difficulty'        => ['nullable', 'in:easy,medium,hard'],
             'rules'                 => ['nullable', 'array'],
         ]);
@@ -117,6 +117,19 @@ class RoomController extends Controller
             ->get();
         // Ar Inertia palīdzību nosūtām datus uz React komponenti "FindRoom"
         return Inertia::render('cardgame/FindRoom', ['rooms' => $rooms]);
+    }
+
+    public function joinRoomByCode(Request $request, string $code)
+    {
+        $code = strtoupper(trim($code));
+        $room = Room::where('room_code', $code)->first();
+
+        if (!$room) {
+            return redirect()->route('findRoom')
+                ->with('error', "No room found with code \"{$code}\".");
+        }
+
+        return $this->joinRoom($request, $room->id);
     }
 
     public function joinRoom(Request $request, int $roomId)

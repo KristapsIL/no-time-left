@@ -30,11 +30,16 @@ class CardGameController extends Controller
     protected function ensureMinimumPlayersWithBots(Room $room): void
     {
         $rules = $room->rules;
-        $configuredBots = max(0, (int) ($rules?->bot_fill_count ?? 1));
-        $maxPlayers = max(2, (int) ($rules?->max_players ?? 4));
-        $targetPlayers = min($maxPlayers, max(2, $room->players()->count() + $configuredBots));
+        $configuredBots = max(0, (int) ($rules?->bot_fill_count ?? 0));
 
+        // No bots configured — don't auto-fill
+        if ($configuredBots === 0) {
+            return;
+        }
+
+        $maxPlayers = max(2, (int) ($rules?->max_players ?? 4));
         $currentCount = $room->players()->count();
+        $targetPlayers = min($maxPlayers, $currentCount + $configuredBots);
 
         while ($currentCount < $targetPlayers) {
             $bot = User::query()->forceCreate([

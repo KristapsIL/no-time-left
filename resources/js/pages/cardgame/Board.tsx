@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Head, usePage } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import RoomChat from '@/components/RoomChat';
 import { PlayerHand } from '@/components/Board/PlayerHand';
 import { GameControls } from '@/components/Board/GameControls';
 import { CardView } from '@/components/Board/CardView';
+import { CardBack } from '@/components/Board/CardBack';
 import { CenterTable } from '@/components/Board/CenterTable';
 import { GameOverModal } from '@/components/Board/GameOverModal';
 import { WaitingLobby } from '@/components/Board/WaitingLobby';
@@ -63,6 +64,44 @@ const OpponentLabel = ({
   </div>
 );
 
+/** Compact card-fan + name badge for all opponents on mobile */
+const MobileOpponentFan = memo(function MobileOpponentFan({
+  player,
+  count,
+  isTurn,
+}: {
+  player: PlayerLite;
+  count: number;
+  isTurn: boolean;
+}) {
+  const MAX_SHOW = 4;
+  const CW = 40, CH = 57, STEP = 7;
+  const show = Math.max(1, Math.min(count, MAX_SHOW));
+  return (
+    <div
+      className={[
+        'flex flex-col items-center gap-1 px-2 pt-2 pb-1.5 rounded-xl transition',
+        isTurn ? 'bg-yellow-400/15 ring-1 ring-yellow-400/60' : 'bg-black/20',
+      ].join(' ')}
+    >
+      {/* Fanned card backs */}
+      <div className="relative" style={{ width: CW + (show - 1) * STEP, height: CH + (show - 1) * STEP }}>
+        {Array.from({ length: show }, (_, i) => (
+          <div key={i} className="absolute" style={{ top: i * STEP, left: i * STEP, zIndex: i }}>
+            <CardBack width={CW} height={CH} fillColor="#1f2937" bandColor="#0ea5e9" rimColor="rgba(0,0,0,0.35)" label="" />
+          </div>
+        ))}
+      </div>
+      <span className={`text-[10px] font-medium truncate max-w-[72px] ${isTurn ? 'text-yellow-300' : 'text-white/70'}`}>
+        {player.name ?? `P${player.id}`}
+      </span>
+      <span className={`text-[10px] font-bold tabular-nums ${isTurn ? 'text-yellow-400' : 'text-white/40'}`}>
+        {count}
+      </span>
+    </div>
+  );
+});
+
 // ── Board ─────────────────────────────────────────────────────────────────────
 export default function Board() {
   const { props } = usePage<Props>();
@@ -114,6 +153,14 @@ export default function Board() {
     toast,
   });
 
+  // ── Collect all opponents for mobile strip ──────────────────────────────
+  const allMobileOpponents: Array<{ seat: PlayerLite; count: number }> = [
+    ...(seats.top   ? [{ seat: seats.top,   count: topCount   }] : []),
+    ...(seats.left  ? [{ seat: seats.left,  count: leftCount  }] : []),
+    ...(seats.right ? [{ seat: seats.right, count: rightCount }] : []),
+    ...(seats.overflow ?? []).map((s) => ({ seat: s, count: game.handCounts[String(s.id)] ?? 0 })),
+  ];
+
   return (
     <AppLayout>
       <Head title="Game" />
@@ -128,24 +175,45 @@ export default function Board() {
           roomCode={room.code}
           onStart={startGame}
           onLeave={leaveGame}
+          isChatOpen={isChatOpen}
+          toggleChat={() => setIsChatOpen((o) => !o)}
+          roomId={room.id}
+          roomRules={room.rules}
         />
       )}
 
-      {/* ── Game board grid ────────────────────────────────────────────── */}
+      {/* ── Game board ────────────────────────────────────────────────── */}
       <div
         className="
-          min-h-[100dvh] w-full grid
-          grid-cols-1 grid-rows-[auto_auto_1fr_auto]
+          min-h-[100dvh] w-full grid relative
+          grid-cols-1 grid-rows-[auto_1fr_auto]
           md:grid-rows-[auto_1fr_auto]
-          md:grid-cols-[96px_minmax(0,1fr)_96px]
-          lg:grid-cols-[112px_minmax(0,1fr)_112px]
-          gap-3 md:gap-4 p-3 md:p-4
-          bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white relative overflow-hidden
-          pt-[max(env(safe-area-inset-top),8px)] pb-[max(env(safe-area-inset-bottom),12px)]
+          md:grid-cols-[130px_minmax(0,1fr)_130px]
+          lg:grid-cols-[150px_minmax(0,1fr)_150px]
+          gap-2 md:gap-4 p-2 md:p-4
+          bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white overflow-hidden
+          pt-[max(env(safe-area-inset-top),8px)] pb-[max(env(safe-area-inset-bottom),8px)]
         "
       >
-        {/* TOP opponent */}
-        <div className="row-start-1 col-start-1 md:col-start-2 min-w-0 min-h-[150px] flex items-center justify-center [container-type:inline-size]">
+        {/* ── Row 1: Opponents ────────────────────────────────────────── */}
+        {/* Mobile: all opponents as compact card fans in one strip */}
+        <div className="md:hidden row-start-1 col-start-1 flex items-end justify-center gap-3 px-2 pt-1 flex-wrap min-h-[110px]">
+          {allMobileOpponents.length > 0 ? (
+            allMobileOpponents.map(({ seat, count }) => (
+              <MobileOpponentFan
+                key={seat.id}
+                player={seat}
+                count={count}
+                isTurn={isSeatTurn(seat.id)}
+              />
+            ))
+          ) : (
+            <div className="opacity-60 text-sm self-center">Waiting for players…</div>
+          )}
+        </div>
+
+        {/* Desktop: top opponent fan */}
+        <div className="hidden md:flex row-start-1 col-start-2 min-w-0 items-center justify-center [container-type:inline-size] min-h-[150px]">
           {seats.top ? (
             <OpponentHandRail
               side="top"
@@ -158,27 +226,7 @@ export default function Board() {
           )}
         </div>
 
-        {/* MOBILE: compact opponent badges */}
-        <div className="md:hidden row-start-2 col-start-1 flex items-center gap-2 overflow-x-auto scrollbar-none px-1 py-1">
-          {([
-            seats.left ? { seat: seats.left, count: leftCount } : null,
-            seats.right ? { seat: seats.right, count: rightCount } : null,
-          ] as Array<{ seat: PlayerLite; count: number } | null>)
-            .filter((item): item is { seat: PlayerLite; count: number } => item !== null)
-            .map((item) => (
-              <div
-                key={item.seat.id}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium shrink-0 ${
-                  isSeatTurn(item.seat.id) ? 'bg-yellow-400 text-black' : 'bg-black/40 text-white'
-                }`}
-              >
-                <span>{item.seat.name ?? `Player ${item.seat.id}`}</span>
-                <span className="bg-white/20 rounded-full px-1.5 py-0.5">{item.count}</span>
-              </div>
-            ))}
-        </div>
-
-        {/* DESKTOP LEFT */}
+        {/* ── Desktop Left ─────────────────────────────────────────────── */}
         <div className="hidden md:flex row-start-2 col-start-1 min-w-0 items-center justify-center">
           {seats.left ? (
             <OpponentHandRail
@@ -192,8 +240,8 @@ export default function Board() {
           )}
         </div>
 
-        {/* CENTER table */}
-        <div className="row-start-3 md:row-start-2 col-start-1 md:col-start-2 min-w-0 flex items-center justify-center">
+        {/* ── Center table ─────────────────────────────────────────────── */}
+        <div className="row-start-2 col-start-1 md:col-start-2 min-w-0 flex items-center justify-center">
           <CenterTable
             topCard={game.topCard}
             isPlacementLocked={isPlacementLocked}
@@ -210,7 +258,7 @@ export default function Board() {
           />
         </div>
 
-        {/* DESKTOP RIGHT */}
+        {/* ── Desktop Right ────────────────────────────────────────────── */}
         <div className="hidden md:flex row-start-2 col-start-3 min-w-0 items-center justify-center">
           {seats.right ? (
             <OpponentHandRail
@@ -224,8 +272,8 @@ export default function Board() {
           )}
         </div>
 
-        {/* BOTTOM: hand + controls */}
-        <div className="row-start-4 md:row-start-3 col-span-1 md:col-span-3 flex flex-col items-center gap-3 pb-2 md:pb-0">
+        {/* ── Bottom: hand + controls ───────────────────────────────────── */}
+        <div className="row-start-3 col-span-1 md:col-span-3 flex flex-col items-center gap-2 pb-1 md:pb-0">
           <div className="relative w-full flex flex-col items-center">
             {showDrawnPlayOption && drawnCards.length > 0 && (
               <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-1">
@@ -264,21 +312,21 @@ export default function Board() {
         </div>
 
         <RoomChat roomId={room.id} isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
-      </div>
 
-      {/* ── Game over modal ────────────────────────────────────────────── */}
-      {game.status === 'finished' && (
-        <GameOverModal
-          winnerId={game.winnerId}
-          userId={userId}
-          isCreator={isCreator}
-          roomId={room.id}
-          roomRules={room.rules}
-          connectedPlayers={connectedPlayers}
-          onPlayAgain={playAgain}
-          onLeave={leaveGame}
-        />
-      )}
+        {/* ── Game over modal — scoped to board content area ────────────── */}
+        {game.status === 'finished' && (
+          <GameOverModal
+            winnerId={game.winnerId}
+            userId={userId}
+            isCreator={isCreator}
+            roomId={room.id}
+            roomRules={room.rules}
+            connectedPlayers={connectedPlayers}
+            onPlayAgain={playAgain}
+            onLeave={leaveGame}
+          />
+        )}
+      </div>
 
       {/* Dismiss drawn-card decision by tapping outside */}
       {showDrawnPlayOption && drawnCards.length > 0 && (

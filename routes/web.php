@@ -31,6 +31,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/storeRules', [RoomController::class, 'store'])->name('storeRules');
     Route::post('/quick-ai-room', [RoomController::class, 'quickAiRoom'])->name('quickAiRoom');
     Route::get('/findRoom', [RoomController::class, 'findRoom'])->name('findRoom');
+    Route::get('/joinroom/code/{code}', [RoomController::class, 'joinRoomByCode'])->name('joinRoomByCode');
     Route::get('/joinroom/{roomId}', [RoomController::class, 'joinRoom'])->name('joinRoom');
     Route::delete('/leaveroom/{roomId}', [RoomController::class, 'leaveRoom'])->name('leaveRoom');
     

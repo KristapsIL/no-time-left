@@ -1,6 +1,6 @@
 // pages/cardgame/FindRoom.tsx
 import AppLayout from '@/layouts/app-layout';
-import { Head, router } from "@inertiajs/react";
+import { Head, router, usePage } from "@inertiajs/react";
 import RoomCard from '@/components/FindRoom/RoomCard';
 import { useMemo, useState } from 'react';
 
@@ -32,7 +32,12 @@ type Props = {
 };
 
 export default function FindRoom({ rooms, auth }: Props) {
+    const { props } = usePage<{ flash?: { error?: string; success?: string } }>();
+    const flashError = props.flash?.error;
+
     const [query, setQuery] = useState('');
+    const [joinCode, setJoinCode] = useState('');
+    const [joinError, setJoinError] = useState<string | null>(flashError ?? null);
     const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'public' | 'private'>('all');
     const [statusFilter, setStatusFilter] = useState<'all' | 'waiting' | 'starting' | 'in_progress' | 'finished'>('all');
     const [maxPlayersFilter, setMaxPlayersFilter] = useState<'all' | '2' | '3' | '4'>('all');
@@ -83,6 +88,42 @@ export default function FindRoom({ rooms, auth }: Props) {
                 <div className="max-w-6xl mx-auto">
                     <h1 className="text-4xl font-bold mb-2 text-center text-zinc-900 dark:text-zinc-100" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Find a Room</h1>
                     <p className="text-center text-zinc-600 dark:text-zinc-300 mb-8">Join an existing table or jump into a fresh room.</p>
+
+                    {/* Join by code */}
+                    <div className="mb-4 rounded-2xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-white/5">
+                        <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-2">Join by room code</p>
+                        <form
+                            onSubmit={(e) => {
+                                e.preventDefault();
+                                const code = joinCode.trim().toUpperCase();
+                                if (!code) return;
+                                setJoinError(null);
+                                router.visit(`/joinroom/code/${encodeURIComponent(code)}`);
+                            }}
+                            className="flex gap-2"
+                        >
+                            <input
+                                type="text"
+                                value={joinCode}
+                                onChange={(e) => { setJoinCode(e.target.value.toUpperCase()); setJoinError(null); }}
+                                placeholder="e.g. ABC123"
+                                maxLength={8}
+                                className="flex-1 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-mono tracking-widest text-zinc-900 outline-none focus:ring-2 focus:ring-cyan-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 uppercase"
+                                spellCheck={false}
+                                autoComplete="off"
+                            />
+                            <button
+                                type="submit"
+                                disabled={!joinCode.trim()}
+                                className="px-4 py-2 rounded-xl bg-cyan-600 text-white font-semibold text-sm hover:bg-cyan-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                Join
+                            </button>
+                        </form>
+                        {joinError && (
+                            <p className="mt-2 text-xs text-red-500">{joinError}</p>
+                        )}
+                    </div>
 
                     <div className="mb-6 rounded-2xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-white/5">
                         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">

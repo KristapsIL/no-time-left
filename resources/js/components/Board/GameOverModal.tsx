@@ -78,7 +78,7 @@ export const GameOverModal: React.FC<Props> = ({
   const winnerName = winner?.name ?? (winnerId != null ? `Player ${winnerId}` : null);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+    <div className="absolute inset-0 z-40 bg-black/70 flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-zinc-950 text-zinc-100 rounded-2xl p-6 w-full max-w-md shadow-xl border border-white/10">
         {!editing ? (
           <div className="space-y-5">
