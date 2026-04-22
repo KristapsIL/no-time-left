@@ -134,13 +134,6 @@ function gameReducer(state: GameState, action: Action): GameState {
   }
 }
 
-const parseCard = (card: string): { value: string; suit: string } => {
-  const [value = '', suit = ''] = card.split('-');
-  return { value, suit };
-};
-
-const cardColor = (suit: string) => (suit === '♥' || suit === '♦' ? 'text-rose-600' : 'text-zinc-900');
-
 type FlyingCard = {
   card: string;
   from: 'player' | 'bot' | 'peer';
@@ -705,10 +698,11 @@ const canPlayCard = useCallback(
 // Guarded play: ignore clicks when not my turn, invalid, or turn has expired
 const onPlay = useCallback(
   (card: string) => {
+    if (showDrawnPlayOption && drawnCards[0] !== card) return;
     if (!canPlayCard(card)) return;
     playCard(card);
   },
-  [canPlayCard, playCard]
+  [canPlayCard, playCard, showDrawnPlayOption, drawnCards]
 );
 
 // Guarded pickup: ignore clicks when not my turn or turn has already expired
@@ -906,20 +900,28 @@ const placementCard = placingCard;
               <Deck isMyTurn={isMyTurn && !turnExpiredRef.current && turnTimeLeft > 0 && !isPlacementLocked && !isBotActionPending} pickupCard={onPickup} />
               <TopCard topCard={game.topCard} isPlacing={isPlacementLocked} />
 
-              <div className="pointer-events-none absolute top-full mt-3 left-1/2 -translate-x-1/2 h-10 w-56">
-                <div className="flex flex-col items-center gap-1">
-                  {isPlacementLocked && placingCard && (
-                    <div className="text-[11px] rounded-full bg-amber-500/20 border border-amber-400/40 px-3 py-1 text-amber-100">
-                      Placing {placingCard.replace('-', ' ')}...
-                    </div>
-                  )}
-                  {isBotActionPending && (
-                    <div className="text-[11px] rounded-full bg-cyan-500/20 border border-cyan-400/40 px-3 py-1 text-cyan-100">
-                      Bot is thinking...
-                    </div>
-                  )}
+              {showDrawnPlayOption && drawnCards.length > 0 && (
+                <div className="absolute -top-32 left-1/2 z-40 -translate-x-1/2">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      const playCandidate = drawnCards[0];
+                      setShowDrawnPlayOption(false);
+                      setDrawnCards([]);
+                      if (playCandidate) {
+                        playCard(playCandidate);
+                      }
+                    }}
+                    className="rounded-lg transition hover:-translate-y-1"
+                    title="Play drawn card"
+                  >
+                    <CardView card={drawnCards[0]} className="w-14 h-20 shadow-2xl ring-2 ring-cyan-300" />
+                  </button>
+                  <p className="mt-1 text-center text-[11px] text-cyan-200">Tap card to play • {drawDecisionTimeLeft}s</p>
                 </div>
-              </div>
+              )}
+
             </div>
 
             {game.currentTurn != null && (
@@ -935,6 +937,19 @@ const placementCard = placingCard;
                 </div>
               </div>
             )}
+
+            <div className="min-h-[42px] flex flex-col items-center justify-center gap-1">
+              {isPlacementLocked && placingCard && (
+                <div className="text-[11px] rounded-full bg-amber-500/20 border border-amber-400/40 px-3 py-1 text-amber-100">
+                  Placing {placingCard.replace('-', ' ')}...
+                </div>
+              )}
+              {isBotActionPending && (
+                <div className="text-[11px] rounded-full bg-cyan-500/20 border border-cyan-400/40 px-3 py-1 text-cyan-100">
+                  Bot is thinking...
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1017,52 +1032,16 @@ const placementCard = placingCard;
         </div>
       )}
       {showDrawnPlayOption && drawnCards.length > 0 && (
-        <div className="fixed bottom-[max(env(safe-area-inset-bottom),14px)] left-1/2 z-50 -translate-x-1/2 w-[min(92vw,360px)] rounded-2xl border border-cyan-400/40 bg-zinc-950/95 p-4 shadow-2xl backdrop-blur">
-          <p className="text-center text-xs text-cyan-100/90">Draw decision • {drawDecisionTimeLeft}s</p>
-          <div className="mt-2 flex items-center justify-center gap-2">
-            {drawnCards.slice(0, 2).map((card) => {
-              const c = parseCard(card);
-              return (
-                <div
-                  key={card}
-                  className="h-24 w-16 rounded-lg border-2 border-cyan-400 bg-white font-bold shadow-lg flex flex-col items-center justify-center gap-1"
-                >
-                  <span className={`text-sm ${cardColor(c.suit)}`}>{c.value}</span>
-                  <span className={`text-xl ${cardColor(c.suit)}`}>{c.suit}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                const playCandidate = drawnCards[0];
-                setShowDrawnPlayOption(false);
-                setDrawnCards([]);
-                if (playCandidate) {
-                  playCard(playCandidate);
-                }
-              }}
-              className="rounded-lg bg-cyan-400 px-3 py-2 text-sm font-semibold text-zinc-900 hover:bg-cyan-300 transition"
-            >
-              Play
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowDrawnPlayOption(false);
-                setDrawnCards([]);
-                if (game.currentTurn === userId) {
-                  passTurn();
-                }
-              }}
-              className="rounded-lg bg-zinc-800 px-3 py-2 text-sm font-semibold text-zinc-100 hover:bg-zinc-700 transition border border-zinc-600"
-            >
-              Keep
-            </button>
-          </div>
-        </div>
+        <div
+          className="fixed inset-0 z-30"
+          onClick={() => {
+            setShowDrawnPlayOption(false);
+            setDrawnCards([]);
+            if (game.currentTurn === userId) {
+              passTurn();
+            }
+          }}
+        />
       )}
     </AppLayout>
   );

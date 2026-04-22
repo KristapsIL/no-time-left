@@ -12,9 +12,11 @@ Route::get('/', function () {
 
 Route::middleware(['auth', 'verified'])->group(function () {
 
-    Route::get('/dashboard', function () {
-        return Inertia::render('dashboard');
+    Route::get('/home', function () {
+        return Inertia::render('home');
     })->name('dashboard');
+
+    Route::redirect('/dashboard', '/home');
 
     Route::get('/board/{roomId}', [CardGameController::class, 'board'])->name('board');
     Route::post('/board/{roomId}/reset', [CardGameController::class, 'reset'])->name('board.reset');

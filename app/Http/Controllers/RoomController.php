@@ -122,30 +122,90 @@ class RoomController extends Controller
     public function joinRoom(Request $request, int $roomId)
     {
         $userId = $request->user()->id;
-        $room = Room::with(['game', 'players'])->findOrFail($roomId);
-        
+        $room = Room::with(['game', 'players', 'rules'])->findOrFail($roomId);
+
         $isExistingPlayer = $room->players()->where('user_id', $userId)->exists();
-        
+
         if ($isExistingPlayer) {
             return redirect()->route('board', ['roomId' => $roomId])
                 ->with('success', 'Welcome back! You have rejoined the game.');
         }
-        
+
+        // Mid-match join: take over a bot's seat and hand
         if ($room->isGameActive()) {
-            return redirect()->route('findRoom')
-                ->with('error', 'Cannot join room: Game is currently in progress.');
+            $botToReplace = $room->players()
+                ->where('users.role', 'bot')
+                ->orderBy('room_user.created_at')
+                ->first();
+
+            if (!$botToReplace) {
+                return redirect()->route('findRoom')
+                    ->with('error', 'Cannot join room: Game is in progress and no bot slots are available.');
+            }
+
+            $botId = (int) $botToReplace->id;
+            $newCurrentTurn = null;
+
+            DB::transaction(function () use ($roomId, $userId, $botId, &$newCurrentTurn) {
+                $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
+                $game = $room->game;
+
+                // Transfer bot's hand to the new player
+                $hands = $game->player_hands ?? [];
+                $botHand = $hands[(string) $botId] ?? [];
+                unset($hands[(string) $botId]);
+                $hands[(string) $userId] = $botHand;
+
+                // Hand over the turn if the bot was up next
+                $currentTurn = (int) $game->current_turn;
+                if ($currentTurn === $botId) {
+                    $currentTurn = $userId;
+                }
+                $newCurrentTurn = $currentTurn;
+
+                $game->player_hands = $hands;
+                $game->current_turn = $currentTurn;
+                $game->save();
+
+                // Swap bot → real player in room_user
+                DB::table('room_user')->where('user_id', $botId)->delete();
+                DB::table('room_user')->updateOrInsert(
+                    ['user_id' => $userId],
+                    [
+                        'room_id'    => $roomId,
+                        'updated_at' => now(),
+                        'created_at' => now(),
+                    ]
+                );
+
+                // Send the hand to the new player
+                $handCounts = collect($hands)->map(fn($h) => count($h))->toArray();
+                broadcast(new \App\Events\HandSynced(
+                    roomId: $roomId,
+                    userId: $userId,
+                    hand: $botHand,
+                    handCounts: $handCounts,
+                    deckCount: count($game->deck ?? []),
+                    usedCards: $game->used_cards ?? [],
+                    turnPlayerId: $currentTurn,
+                ));
+            });
+
+            return redirect()->route('board', ['roomId' => $roomId])
+                ->with('success', 'You joined the ongoing game, taking over a bot\'s hand!');
         }
-        
+
+        // Pre-game join
         $currentPlayerCount = $room->players()->count();
         $maxPlayers = $room->rules->max_players ?? 4;
-        
+
         if ($currentPlayerCount >= $maxPlayers) {
             $botToReplace = $room->players()
                 ->where('users.role', 'bot')
                 ->orderBy('room_user.created_at')
                 ->first();
 
-            if ($botToReplace && !$room->isGameActive()) {
+            if ($botToReplace) {
                 $room->players()->detach($botToReplace->id);
                 $room->load('players');
             } else {
@@ -153,7 +213,7 @@ class RoomController extends Controller
                     ->with('error', 'Cannot join room: Room is full.');
             }
         }
-        
+
         if ($room->game && $room->game->isFinished()) {
             return redirect()->route('findRoom')
                 ->with('error', 'Cannot join room: Game has finished.');

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import AppLayout from '@/layouts/app-layout';
 import { Head, router } from "@inertiajs/react";
 
@@ -8,16 +8,8 @@ export default function CreateRoom() {
   const [maxPlayers, setMaxPlayers] = useState(2);
   const [turnTimeout, setTurnTimeout] = useState(5);
   const [botsEnabled, setBotsEnabled] = useState(true);
-  const [botFillCount, setBotFillCount] = useState(1);
   const [botDifficulty, setBotDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [rules, setRules] = useState<string[]>([]);
-
-  useEffect(() => {
-    const maxBots = Math.max(0, maxPlayers - 1);
-    if (botFillCount > maxBots) {
-      setBotFillCount(maxBots);
-    }
-  }, [maxPlayers, botFillCount]);
 
   const handleRuleChange = (rule: string) => {
     setRules((prev) =>
@@ -32,7 +24,7 @@ export default function CreateRoom() {
       public: isPublic,
       max_players: maxPlayers,
       turn_timeout_seconds: turnTimeout,
-      bot_fill_count: botsEnabled ? botFillCount : 0,
+      bot_fill_count: botsEnabled ? maxPlayers : 0,
       bot_difficulty: botsEnabled ? botDifficulty : 'medium',
       rules: rules,
     });
@@ -163,7 +155,7 @@ export default function CreateRoom() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Enable Bots</p>
-                  <p className="text-xs text-zinc-600 dark:text-zinc-300">Toggle AI autofill for your room</p>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-300">Auto-fill empty slots on start. Real players can replace bots mid-match.</p>
                 </div>
                 <button
                   type="button"
@@ -178,28 +170,7 @@ export default function CreateRoom() {
               </div>
 
               {botsEnabled && (
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label
-                      htmlFor="bot_fill_count"
-                      className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                    >
-                      Auto-fill bots on start
-                    </label>
-                    <select
-                      id="bot_fill_count"
-                      name="bot_fill_count"
-                      value={botFillCount}
-                      onChange={(e) => setBotFillCount(Number(e.target.value))}
-                      className="w-full rounded-2xl border border-gray-300 bg-white px-3 py-3 text-gray-900 focus:ring-2 focus:ring-cyan-500 dark:border-gray-700 dark:bg-neutral-900 dark:text-gray-100"
-                    >
-                      <option value={0}>0 (Humans only)</option>
-                      {maxPlayers >= 2 && <option value={1}>1 bot</option>}
-                      {maxPlayers >= 3 && <option value={2}>2 bots</option>}
-                      {maxPlayers >= 4 && <option value={3}>3 bots</option>}
-                    </select>
-                  </div>
-
+                <div className="mt-4">
                   <div>
                     <label
                       htmlFor="bot_difficulty"

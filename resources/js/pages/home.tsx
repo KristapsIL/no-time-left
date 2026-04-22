@@ -5,10 +5,10 @@ import { useState, useEffect } from 'react';
 import { router } from '@inertiajs/react';
 
 const breadcrumbs: BreadcrumbItem[] = [
-  { title: 'Home', href: '/dashboard' },
+  { title: 'Home', href: '/home' },
 ];
 
-export default function Dashboard() {
+export default function Home() {
   const [showCards, setShowCards] = useState(false);
   
   useEffect(() => {

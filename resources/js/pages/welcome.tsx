@@ -55,18 +55,7 @@ const canPlay = (card: string, topCard: string) => {
     return c.suit === t.suit || c.value === t.value;
 };
 
-const drawUntilPlayable = (hand: string[], deck: string[], topCard: string): { hand: string[]; deck: string[] } => {
-    let nextHand = [...hand];
-    let nextDeck = [...deck];
 
-    while (nextDeck.length > 0 && !nextHand.some((c) => canPlay(c, topCard))) {
-        const drawn = nextDeck.pop();
-        if (!drawn) break;
-        nextHand.push(drawn);
-    }
-
-    return { hand: nextHand, deck: nextDeck };
-};
 
 const createDemoState = (): DemoState => {
     const deck = shuffle(VALUES.flatMap((value) => SUITS.map((suit) => `${value}-${suit}`)));
@@ -160,29 +149,37 @@ export default function Welcome() {
             setDemo((prev) => {
                 if (prev.status !== 'in_progress' || prev.turn !== 'bot') return prev;
 
-                const withDraw = drawUntilPlayable(prev.botHand, prev.deck, prev.topCard);
-                const playableCard = withDraw.hand.find((c) => canPlay(c, prev.topCard));
+                // Try to play from current hand; if not, draw exactly one card
+                let botHand = [...prev.botHand];
+                let botDeck = [...prev.deck];
+                let playableCard = botHand.find((c) => canPlay(c, prev.topCard)) ?? null;
+
+                if (!playableCard && botDeck.length > 0) {
+                    const drawn = botDeck.pop()!;
+                    botHand = [...botHand, drawn];
+                    if (canPlay(drawn, prev.topCard)) playableCard = drawn;
+                }
 
                 if (!playableCard) {
                     return {
                         ...prev,
-                        botHand: withDraw.hand,
-                        deck: withDraw.deck,
+                        botHand,
+                        deck: botDeck,
                         turn: 'player',
-                        note: 'Bot passed. Your turn.',
+                        note: 'Bot drew a card and passed. Your turn.',
                         hasDrawnThisTurn: false,
                         justDrawn: [],
                     };
                 }
 
-                const cardIndex = withDraw.hand.indexOf(playableCard);
-                const nextBotHand = withDraw.hand.filter((_, i) => i !== cardIndex);
+                const cardIndex = botHand.indexOf(playableCard);
+                const nextBotHand = botHand.filter((_, i) => i !== cardIndex);
 
                 if (nextBotHand.length === 0) {
                     return {
                         ...prev,
                         botHand: [],
-                        deck: withDraw.deck,
+                        deck: botDeck,
                         topCard: playableCard,
                         status: 'finished',
                         winner: 'bot',
@@ -193,7 +190,7 @@ export default function Welcome() {
                 return {
                     ...prev,
                     botHand: nextBotHand,
-                    deck: withDraw.deck,
+                    deck: botDeck,
                     topCard: playableCard,
                     turn: 'player',
                     note: `Bot played ${playableCard.replace('-', ' ')}. Your turn.`,
@@ -241,7 +238,7 @@ export default function Welcome() {
                                 href={dashboard()}
                                 className="rounded-full border border-black/15 bg-white/70 px-5 py-2 font-medium text-zinc-900 transition hover:-translate-y-0.5 hover:bg-white dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
                             >
-                                Dashboard
+                                Home
                             </Link>
                         ) : (
                             <>
@@ -304,7 +301,7 @@ export default function Welcome() {
                                             href={dashboard()}
                                             className="inline-flex items-center justify-center rounded-2xl border border-black/20 bg-white px-7 py-3 text-sm font-semibold text-zinc-800 transition hover:-translate-y-0.5 hover:border-black/40 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
                                         >
-                                            Continue to Dashboard
+                                            Open Game Hub
                                         </Link>
                                     </>
                                 ) : (
@@ -417,13 +414,15 @@ export default function Welcome() {
                                         </div>
                                     </div>
 
-                                    {/* Status */}
-                                    {demo.status === 'finished' && (
+                                    {/* Status / Note */}
+                                    {demo.status === 'finished' ? (
                                         <div className="rounded-lg bg-yellow-900/30 px-3 py-2 text-center">
                                             <p className="text-sm font-bold text-yellow-100">
                                                 {demo.winner === 'player' ? '🎉 You Won!' : '🤖 Bot Won!'}
                                             </p>
                                         </div>
+                                    ) : (
+                                        <p className="text-center text-[11px] text-white/55">{demo.note}</p>
                                     )}
                                 </div>
 
@@ -458,91 +457,53 @@ export default function Welcome() {
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-3">
-                            <article className="rounded-2xl border border-black/10 bg-white/85 p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
-                                <p className="text-xs uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400">1. Join</p>
+                            <article className="relative overflow-hidden rounded-2xl border border-black/10 bg-white/85 p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
+                                <span className="pointer-events-none absolute -right-1 -top-3 select-none text-7xl font-black leading-none text-zinc-900/[0.05] dark:text-white/[0.06]">01</span>
+                                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-cyan-600 dark:text-cyan-400">Join</p>
                                 <h4 className="mt-2 text-base font-bold text-zinc-900 dark:text-zinc-100">Create or Enter a Room</h4>
-                                <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">Public and private rooms support quick solo starts or full multiplayer tables.</p>
+                                <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Public and private rooms support quick solo starts or full multiplayer tables.</p>
                             </article>
-                            <article className="rounded-2xl border border-black/10 bg-white/85 p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
-                                <p className="text-xs uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400">2. Play</p>
+                            <article className="relative overflow-hidden rounded-2xl border border-black/10 bg-white/85 p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
+                                <span className="pointer-events-none absolute -right-1 -top-3 select-none text-7xl font-black leading-none text-zinc-900/[0.05] dark:text-white/[0.06]">02</span>
+                                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-cyan-600 dark:text-cyan-400">Play</p>
                                 <h4 className="mt-2 text-base font-bold text-zinc-900 dark:text-zinc-100">Match Suit or Value</h4>
-                                <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">Every turn is straightforward, but timing and hand management decide who controls the pace.</p>
+                                <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Every turn is straightforward, but timing and hand management decide who controls the pace.</p>
                             </article>
-                            <article className="rounded-2xl border border-black/10 bg-white/85 p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
-                                <p className="text-xs uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400">3. Finish</p>
+                            <article className="relative overflow-hidden rounded-2xl border border-black/10 bg-white/85 p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
+                                <span className="pointer-events-none absolute -right-1 -top-3 select-none text-7xl font-black leading-none text-zinc-900/[0.05] dark:text-white/[0.06]">03</span>
+                                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-cyan-600 dark:text-cyan-400">Finish</p>
                                 <h4 className="mt-2 text-base font-bold text-zinc-900 dark:text-zinc-100">Empty Hand to Win</h4>
-                                <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">Beat the timer, force hard decisions, and clear your hand before anyone else can.</p>
+                                <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Beat the timer, force hard decisions, and clear your hand before anyone else does.</p>
                             </article>
                         </div>
                     </section>
 
-                    <section className="grid gap-4 pb-12 md:grid-cols-[1.1fr_0.9fr]">
-                        <div className="rounded-3xl border border-black/10 bg-white/85 p-6 shadow-lg dark:border-white/10 dark:bg-white/10">
+                    <section className="pb-14">
+                        <div className="mb-5 flex items-center justify-between">
                             <h3 className="text-xl font-bold text-zinc-900 dark:text-zinc-100" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                                 Built for Clean, Real-Time Play
                             </h3>
-                            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                <div className="rounded-xl border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/5">
-                                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Live room sync</p>
-                                    <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">Instant state updates for turns, hands, and top card.</p>
-                                </div>
-                                <div className="rounded-xl border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/5">
-                                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Fast room setup</p>
-                                    <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">Create custom rules and launch without a long setup flow.</p>
-                                </div>
-                                <div className="rounded-xl border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/5">
-                                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">AI support</p>
-                                    <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">Fill seats with bots so rounds start immediately.</p>
-                                </div>
-                                <div className="rounded-xl border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/5">
-                                    <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Timer pressure</p>
-                                    <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">Keeps each round focused and prevents stalled turns.</p>
-                                </div>
-                            </div>
                         </div>
-
-                        <div className="rounded-3xl border border-black/10 bg-zinc-900 p-6 text-zinc-100 shadow-xl dark:border-white/10 dark:bg-[#05090f]">
-                            <h3 className="text-xl font-bold" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-                                Ready to Start?
-                            </h3>
-                            <p className="mt-2 text-sm text-zinc-300">
-                                Jump into a fast game now or open Home to manage rooms and settings.
-                            </p>
-
-                            <div className="mt-5 grid gap-3">
-                                {auth.user ? (
-                                    <>
-                                        <Link
-                                            href="/quick-ai-room"
-                                            method="post"
-                                            as="button"
-                                            className="inline-flex items-center justify-center rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-zinc-900 transition hover:bg-cyan-300"
-                                        >
-                                            Quick AI Match
-                                        </Link>
-                                        <Link
-                                            href={dashboard()}
-                                            className="inline-flex items-center justify-center rounded-xl border border-zinc-500 px-5 py-3 text-sm font-semibold text-zinc-100 transition hover:border-zinc-300"
-                                        >
-                                            Open Home
-                                        </Link>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Link
-                                            href={register()}
-                                            className="inline-flex items-center justify-center rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-zinc-900 transition hover:bg-cyan-300"
-                                        >
-                                            Create Account
-                                        </Link>
-                                        <Link
-                                            href={login()}
-                                            className="inline-flex items-center justify-center rounded-xl border border-zinc-500 px-5 py-3 text-sm font-semibold text-zinc-100 transition hover:border-zinc-300"
-                                        >
-                                            Log In
-                                        </Link>
-                                    </>
-                                )}
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                            <div className="rounded-2xl border border-black/10 bg-white/85 p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
+                                <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-100 text-lg dark:bg-cyan-900/40">⚡</div>
+                                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Live Room Sync</p>
+                                <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">Instant state updates for turns, hands, and top card via WebSocket.</p>
+                            </div>
+                            <div className="rounded-2xl border border-black/10 bg-white/85 p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
+                                <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-lg dark:bg-emerald-900/40">🚀</div>
+                                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Fast Room Setup</p>
+                                <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">Create custom rooms with rules and launch without a long setup flow.</p>
+                            </div>
+                            <div className="rounded-2xl border border-black/10 bg-white/85 p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
+                                <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-lg dark:bg-violet-900/40">🤖</div>
+                                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">AI Opponents</p>
+                                <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">Fill seats with bots at adjustable difficulty so rounds start immediately.</p>
+                            </div>
+                            <div className="rounded-2xl border border-black/10 bg-white/85 p-5 shadow-sm dark:border-white/10 dark:bg-white/10">
+                                <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-lg dark:bg-amber-900/40">⏱</div>
+                                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Turn Timer</p>
+                                <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">Configurable timer keeps rounds focused and eliminates stalled turns.</p>
                             </div>
                         </div>
                     </section>
