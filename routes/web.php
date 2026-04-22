@@ -20,6 +20,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/board/{roomId}', [CardGameController::class, 'board'])->name('board');
     Route::post('/board/{roomId}/reset', [CardGameController::class, 'reset'])->name('board.reset');
+    Route::patch('/board/{roomId}/room-settings', [CardGameController::class, 'updateRoomSettings'])->name('board.room-settings');
     Route::match(['get', 'post'], '/board/{roomId}/start-game', [CardGameController::class, 'startGame'] )->name('startGame');
     Route::post('/board/{roomId}/play-card', [CardGameController::class, 'playCard']);
     Route::post('/board/{roomId}/pickup', [CardGameController::class, 'pickUpCard']);

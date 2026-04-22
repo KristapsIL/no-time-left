@@ -26,9 +26,8 @@ export default function Home() {
           {/* Hero Section */}
           <div className="text-center mb-10">
             <div className="relative">
-              <p className="text-xs uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400 mb-3">No Time Left</p>
               <h1 className="text-5xl md:text-7xl font-bold text-zinc-900 dark:text-zinc-100 mb-4 tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-                HOME
+                No Time Left
               </h1>
               <div className="flex justify-center gap-2 mb-6">
                 {playingCards.map((suit, i) => (

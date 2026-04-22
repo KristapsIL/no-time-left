@@ -382,6 +382,7 @@ class CardGameController extends Controller
             'currentTurn' => $game->current_turn,
             'winnerId'    => $game->winner,
             'userId'      => $user->id,
+            'creatorId'   => $room->created_by,
         ]);
     }
 
@@ -411,6 +412,29 @@ class CardGameController extends Controller
         });
 
         return response()->json(['ok' => true], 200);
+    }
+
+    public function updateRoomSettings(Request $request, int $roomId): \Illuminate\Http\JsonResponse
+    {
+        $userId = (int) $request->user()->id;
+
+        $room = Room::findOrFail($roomId);
+        if ((int) $room->created_by !== $userId) {
+            abort(403, 'Only the room creator can edit settings.');
+        }
+
+        $validated = $request->validate([
+            'max_players'           => ['nullable', 'integer', 'min:2', 'max:4'],
+            'turn_timeout_seconds'  => ['nullable', 'integer', 'min:2', 'max:60'],
+            'bot_fill_count'        => ['nullable', 'integer', 'min:0', 'max:4'],
+            'rules'                 => ['nullable', 'array'],
+        ]);
+
+        $roomRules = RoomRules::where('room_id', $roomId)->firstOrFail();
+        $roomRules->fill(array_filter($validated, fn ($v) => $v !== null));
+        $roomRules->save();
+
+        return response()->json(['ok' => true]);
     }
 
     protected function buildDeck(): array
@@ -470,6 +494,12 @@ class CardGameController extends Controller
         try {
             // Iegūst pašreizējā lietotāja ID
             $userId = $request->user()->id;
+
+            // Only the room creator may start the game
+            $room = Room::findOrFail($roomId);
+            if ((int) $room->created_by !== (int) $userId) {
+                abort(403, 'Only the room creator can start the game.');
+            }
 
             
             // Veic spēles inicializāciju transakcijā, lai nodrošinātu datu konsekvenci,

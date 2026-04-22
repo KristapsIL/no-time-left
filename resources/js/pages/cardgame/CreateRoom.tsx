@@ -2,13 +2,30 @@ import React, { useState } from "react";
 import AppLayout from '@/layouts/app-layout';
 import { Head, router } from "@inertiajs/react";
 
+const Toggle = ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    onClick={onChange}
+    className={`relative flex-shrink-0 h-7 w-12 rounded-full border transition-colors ${
+      checked ? 'bg-cyan-500 border-cyan-400' : 'bg-zinc-300 border-zinc-400 dark:bg-zinc-700 dark:border-zinc-600'
+    }`}
+  >
+    <span
+      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+        checked ? 'left-[26px]' : 'left-1'
+      }`}
+    />
+  </button>
+);
+
 export default function CreateRoom() {
   const [Name, setName] = useState<string>('');
   const [isPublic, setIsPublic] = useState(true);
   const [maxPlayers, setMaxPlayers] = useState(2);
   const [turnTimeout, setTurnTimeout] = useState(5);
   const [botsEnabled, setBotsEnabled] = useState(true);
-  const [botDifficulty, setBotDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [rules, setRules] = useState<string[]>([]);
 
   const handleRuleChange = (rule: string) => {
@@ -25,7 +42,7 @@ export default function CreateRoom() {
       max_players: maxPlayers,
       turn_timeout_seconds: turnTimeout,
       bot_fill_count: botsEnabled ? maxPlayers : 0,
-      bot_difficulty: botsEnabled ? botDifficulty : 'medium',
+      bot_difficulty: 'medium',
       rules: rules,
     });
   };
@@ -86,24 +103,12 @@ export default function CreateRoom() {
             </div>
 
             {/* Public Toggle */}
-            <div>
-              <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Visibility
-              </span>
-              <label className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white/70 px-3 py-2 dark:border-white/10 dark:bg-white/5">
-                <input
-                  id="public"
-                  name="public"
-                  type="checkbox"
-                  checked={isPublic}
-                  onChange={(e) => setIsPublic(e.target.checked)}
-                  className="h-4 w-4 accent-indigo-600"
-                  aria-checked={isPublic}
-                />
-                <span className="text-gray-700 dark:text-gray-300">
-                  Public Room
-                </span>
-              </label>
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-black/10 bg-black/[0.03] px-4 py-3 dark:border-white/10 dark:bg-white/5">
+              <div>
+                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Public Room</p>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">Visible in the room browser</p>
+              </div>
+              <Toggle checked={isPublic} onChange={() => setIsPublic((p) => !p)} />
             </div>
 
             {/* Max Players */}
@@ -151,73 +156,26 @@ export default function CreateRoom() {
               </p>
             </div>
 
-            <div className="md:col-span-2 rounded-2xl border border-black/10 bg-black/[0.03] p-4 dark:border-white/10 dark:bg-white/5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Enable Bots</p>
-                  <p className="text-xs text-zinc-600 dark:text-zinc-300">Auto-fill empty slots on start. Real players can replace bots mid-match.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setBotsEnabled((prev) => !prev)}
-                  className={`relative h-8 w-16 rounded-full border transition ${botsEnabled ? 'bg-cyan-500 border-cyan-400' : 'bg-zinc-300 border-zinc-400 dark:bg-zinc-700 dark:border-zinc-600'}`}
-                  aria-pressed={botsEnabled}
-                >
-                  <span
-                    className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition ${botsEnabled ? 'left-9' : 'left-1'}`}
-                  />
-                </button>
+            {/* Bots */}
+            <div className="md:col-span-2 flex items-center justify-between gap-3 rounded-2xl border border-black/10 bg-black/[0.03] px-4 py-3 dark:border-white/10 dark:bg-white/5">
+              <div>
+                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Enable Bots</p>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">Auto-fill empty slots on start. Real players can take over mid-match.</p>
               </div>
-
-              {botsEnabled && (
-                <div className="mt-4">
-                  <div>
-                    <label
-                      htmlFor="bot_difficulty"
-                      className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                    >
-                      Bot difficulty
-                    </label>
-                    <select
-                      id="bot_difficulty"
-                      name="bot_difficulty"
-                      value={botDifficulty}
-                      onChange={(e) => setBotDifficulty(e.target.value as 'easy' | 'medium' | 'hard')}
-                      className="w-full rounded-2xl border border-gray-300 bg-white px-3 py-3 text-gray-900 focus:ring-2 focus:ring-cyan-500 dark:border-gray-700 dark:bg-neutral-900 dark:text-gray-100"
-                    >
-                      <option value="easy">Easy</option>
-                      <option value="medium">Medium</option>
-                      <option value="hard">Hard</option>
-                    </select>
-                  </div>
-                </div>
-              )}
+              <Toggle checked={botsEnabled} onChange={() => setBotsEnabled((p) => !p)} />
             </div>
 
             {/* Rules */}
             <div className="md:col-span-2">
-              <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Rules
-              </span>
-
-              <div className="space-y-2 rounded-2xl border border-black/10 bg-white/60 p-3 dark:border-white/10 dark:bg-white/5" role="group" aria-label="Rules">
-                <label className="flex items-center gap-2">
-                  <input
-                    id="rule-pick_up_till_match"
-                    name="rules[]"
-                    type="checkbox"
-                    checked={rules.includes("pick_up_till_match")}
-                    onChange={() => handleRuleChange("pick_up_till_match")}
-                    className="h-4 w-4 accent-indigo-600"
-                    aria-checked={rules.includes("pick_up_till_match")}
-                    value="pick_up_till_match"
-                  />
-                  <span className="text-gray-700 dark:text-gray-300">
-                    Pick up cards until match
-                  </span>
-                </label>
-
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">More rules can be added here later.</p>
+              <p className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Rules</p>
+              <div className="space-y-2 rounded-2xl border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/5" role="group" aria-label="Rules">
+                <div className="flex items-center justify-between gap-3 px-1 py-0.5">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Pick up until match</p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Keep drawing until you have a playable card</p>
+                  </div>
+                  <Toggle checked={rules.includes('pick_up_till_match')} onChange={() => handleRuleChange('pick_up_till_match')} />
+                </div>
               </div>
             </div>
 

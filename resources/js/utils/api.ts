@@ -128,3 +128,29 @@ export const resetGameApi = async (roomId: number) => {
   return body ?? {};
 };
 
+export const updateRoomSettingsApi = async (
+  roomId: number,
+  settings: {
+    max_players?: number;
+    turn_timeout_seconds?: number;
+    bot_fill_count?: number;
+    rules?: string[];
+  },
+) => {
+  const res = await fetch(`/board/${roomId}/room-settings`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-CSRF-TOKEN': getCsrf(),
+    },
+    body: JSON.stringify(settings),
+  });
+
+  const body = await parseJsonSafe(res);
+  if (!res.ok) throw buildError(res, body);
+  return body ?? {};
+};
+
