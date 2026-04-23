@@ -172,9 +172,40 @@ export default function CreateRoom() {
                 <div className="flex items-center justify-between gap-3 px-1 py-0.5">
                   <div>
                     <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Pick up until match</p>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Keep drawing until you have a playable card</p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Draw one card per action until you find a playable card</p>
                   </div>
                   <Toggle checked={rules.includes('pick_up_till_match')} onChange={() => handleRuleChange('pick_up_till_match')} />
+                </div>
+                <div className="flex items-center justify-between gap-3 px-1 py-0.5">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">+2 Rule</p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Playing a 2 forces the next player to pick up 2 cards</p>
+                  </div>
+                  <Toggle
+                    checked={rules.includes('plus_two')}
+                    onChange={() => {
+                      handleRuleChange('plus_two');
+                      if (rules.includes('plus_two') && rules.includes('stacking')) {
+                        handleRuleChange('stacking');
+                      }
+                    }}
+                  />
+                </div>
+                {rules.includes('plus_two') && (
+                  <div className="flex items-center justify-between gap-3 px-1 py-0.5 ml-4 border-l-2 border-cyan-400/40 pl-3">
+                    <div>
+                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Stacking</p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">Players can stack 2s to pass the penalty on</p>
+                    </div>
+                    <Toggle checked={rules.includes('stacking')} onChange={() => handleRuleChange('stacking')} />
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-3 px-1 py-0.5">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Double Deck</p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Play with 104 cards (two full decks)</p>
+                  </div>
+                  <Toggle checked={rules.includes('double_deck')} onChange={() => handleRuleChange('double_deck')} />
                 </div>
               </div>
             </div>

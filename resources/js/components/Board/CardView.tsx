@@ -4,6 +4,7 @@ import { parseCard } from '@/utils/parseCard';
 type CardViewProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   card: string;
   selected?: boolean;
+  showPlusTwoLabel?: boolean;
 };
 
 function isPlaceholder(c: string) {
@@ -17,6 +18,7 @@ export const CardView: React.FC<CardViewProps> = ({
   disabled,
   onClick,
   style,
+  showPlusTwoLabel,
   ...rest
 }) => {
   if (isPlaceholder(card)) {
@@ -85,6 +87,15 @@ export const CardView: React.FC<CardViewProps> = ({
       <div className="w-full h-full flex items-center justify-center">
         <div className="text-2xl">{suit}</div>
       </div>
+
+      {/* +2 badge when rule is active */}
+      {showPlusTwoLabel && rank === '2' && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <span className="text-xs font-bold bg-amber-400 text-zinc-900 rounded px-1 leading-tight shadow">
+            +2
+          </span>
+        </div>
+      )}
 
       {/* Rank + suit bottom-right (mirrored) */}
       <div className="absolute bottom-1 right-1 leading-none text-sm font-semibold rotate-180">

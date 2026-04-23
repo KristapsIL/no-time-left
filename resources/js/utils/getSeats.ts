@@ -1,5 +1,5 @@
 // utils/getSeats.ts
-export type PlayerLite = { id: string; name?: string };
+export type PlayerLite = { id: string; name?: string; avatar_url?: string | null };
 
 export type Seats = {
   left: PlayerLite | null;

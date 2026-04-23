@@ -15,8 +15,9 @@ Broadcast::channel('room-{roomId}', function ($user, int $roomId) {
 
     // Presence channels must return user info to share presence roster
     return [
-        'id'   => (int) $user->id,
-        'name' => (string) ($user->name ?? "Player {$user->id}"),
+        'id'        => (int) $user->id,
+        'name'      => (string) ($user->name ?? "Player {$user->id}"),
+        'avatar_url' => $user->avatar_path ? '/storage/' . $user->avatar_path : null,
     ];
 });
 

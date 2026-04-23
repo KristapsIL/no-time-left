@@ -213,11 +213,11 @@ class CardGameController extends Controller
                 $deck = $game->deck ?? $deck;
 
                 $drawnPlayable = null;
-                do {
-                    if (count($deck) === 0) {
-                        break;
-                    }
 
+                // Draw exactly one card; if it's playable the bot plays it,
+                // otherwise the bot passes. pick_up_till_match now means the
+                // human draws one-at-a-time — bots mirror that behaviour.
+                if (count($deck) > 0) {
                     $drawn = array_shift($deck);
                     $hand[] = $drawn;
                     $hands[$playerKey] = $hand;
@@ -225,9 +225,8 @@ class CardGameController extends Controller
                     $topCardAfterDraw = !empty($usedCards) ? $usedCards[array_key_last($usedCards)] : null;
                     if ($topCardAfterDraw && $this->isValidPlay($drawn, $topCardAfterDraw)) {
                         $drawnPlayable = $drawn;
-                        break;
                     }
-                } while ($pickUpTillMatch);
+                }
 
                 if ($drawnPlayable !== null) {
                     $idx = array_search($drawnPlayable, $hand, true);
@@ -867,7 +866,7 @@ class CardGameController extends Controller
     {
         $userId = (int) $request->user()->id;
 
-        [$game, $hand, $handCounts, $deckCount, $drawnCard] = DB::transaction(function () use ($roomId, $userId) {
+        [$game, $hand, $handCounts, $deckCount, $drawnCard, $drawnCount] = DB::transaction(function () use ($roomId, $userId) {
             $room = Room::with(['game', 'players', 'rules'])->lockForUpdate()->findOrFail($roomId);
             $game = $room->game;
 
@@ -882,8 +881,9 @@ class CardGameController extends Controller
             $playerKey  = (string) $userId;
             $playerHand = $hands[$playerKey] ?? [];
             $roomRules  = $room->rules?->rules ?? [];
-            $plusTwoActive = in_array('plus_two', $roomRules, true);
-            $penalty    = (int) ($game->pickup_penalty ?? 0);
+            $plusTwoActive   = in_array('plus_two',           $roomRules, true);
+            $pickUpTillMatch = in_array('pick_up_till_match', $roomRules, true);
+            $penalty         = (int) ($game->pickup_penalty ?? 0);
 
             // ── Penalty draw: forced card pickup due to a +2 ─────────────────────
             if ($penalty > 0 && $plusTwoActive) {
@@ -898,16 +898,13 @@ class CardGameController extends Controller
                 $game->deck           = array_values($deck);
                 $game->pickup_penalty = 0;
                 $nextTurn             = $this->nextPlayerId($room, $userId);
-                $game->current_turn   = $nextTurn;
+                $game->current_turn   = (int) $nextTurn;
                 $game->has_picked_up  = false;
                 $game->save();
 
                 $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
-                return [$game, $playerHand, $handCounts, count($deck), null];
+                return [$game, $playerHand, $handCounts, count($deck), null, $penalty];
             }
-
-            $drawn  = null;
-            // ($deck, $playerKey, $playerHand are already declared above in the penalty branch)
 
             $this->checkDeckAndReshuffle($deck, $game);
 
@@ -919,73 +916,93 @@ class CardGameController extends Controller
                     : !empty($playerHand);
 
                 if (!$canPlayCurrentHand) {
-                    $nextTurn = $this->nextPlayerId($room, (int) $game->current_turn);
-                    $game->current_turn = $nextTurn;
+                    $game->current_turn  = (int) $this->nextPlayerId($room, (int) $game->current_turn);
                     $game->has_picked_up = false;
                     $game->save();
                 }
 
                 $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
-                return [$game, $playerHand, $handCounts, 0, null];
+                return [$game, $playerHand, $handCounts, 0, null, 0];
             }
 
             if ((int) $game->has_picked_up === 0) {
-                $rulesRaw = RoomRules::where('room_id', $roomId)->value('rules');
-                $rules = is_array($rulesRaw) ? $rulesRaw : (json_decode($rulesRaw ?? '[]', true) ?: []);
-                $matchRuleExists = in_array('pick_up_till_match', $rules, true);
-
                 $usedCards = $game->used_cards ?? [];
                 $topCard   = !empty($usedCards) ? $usedCards[array_key_last($usedCards)] : null;
+                $drawnCount = 0;
 
-                do {
-                    $this->checkDeckAndReshuffle($deck, $game);
-                    if (count($deck) === 0) break;
+                if ($pickUpTillMatch) {
+                    // ── Draw cards one at a time until a playable card is found ──────
+                    $limit = 7; // hard cap — standard card game convention
+                    while ($drawnCount < $limit) {
+                        $this->checkDeckAndReshuffle($deck, $game);
+                        if (count($deck) === 0) break;
 
-                    $drawn = array_shift($deck);
-                    $playerHand[] = $drawn;
-                    $hands[$playerKey] = $playerHand;
+                        $card = array_shift($deck);
+                        $playerHand[] = $card;
+                        $drawnCount++;
 
-                    $game->player_hands = $hands;
-                    $game->deck         = $deck;
+                        if ($topCard && $this->isValidPlay($card, $topCard)) {
+                            break; // Found a playable card — stop drawing
+                        }
+                    }
+
+                    $hands[$playerKey]   = $playerHand;
+                    $game->player_hands  = $hands;
+                    $game->deck          = array_values($deck);
+
+                    // Check if ANY card in hand is now playable
+                    $canPlay = $topCard
+                        ? collect($playerHand)->contains(fn ($c) => $this->isValidPlay((string) $c, (string) $topCard))
+                        : !empty($playerHand);
+
+                    if ($canPlay) {
+                        $game->has_picked_up = true;
+                        // Keep current_turn — player must play or press deck to pass
+                    } else {
+                        // Deck ran out with no playable card — pass turn
+                        $game->current_turn  = (int) $this->nextPlayerId($room, (int) $game->current_turn);
+                        $game->has_picked_up = false;
+                    }
                     $game->save();
 
-                } while ($matchRuleExists && !$this->isValidPlay($drawn, $topCard));
-
-                $canPlayAfterPickup = $topCard
-                    ? collect($playerHand)->contains(fn ($c) => $this->isValidPlay((string) $c, (string) $topCard))
-                    : !empty($playerHand);
-
-                if ($canPlayAfterPickup) {
-                    $game->has_picked_up = true;
                 } else {
-                    $nextTurn = $this->nextPlayerId($room, (int) $game->current_turn);
-                    $game->current_turn = $nextTurn;
-                    $game->has_picked_up = false;
-                }
+                    // ── Normal: draw exactly one card ────────────────────────────────
+                    $this->checkDeckAndReshuffle($deck, $game);
+                    if (count($deck) > 0) {
+                        $drawnCard = array_shift($deck);
+                        $playerHand[] = $drawnCard;
+                        $drawnCount = 1;
+                    }
 
-                $game->save();
+                    $hands[$playerKey]  = $playerHand;
+                    $game->player_hands = $hands;
+                    $game->deck         = array_values($deck);
+
+                    $canPlayAfterPickup = $topCard
+                        ? collect($playerHand)->contains(fn ($c) => $this->isValidPlay((string) $c, (string) $topCard))
+                        : !empty($playerHand);
+
+                    if ($canPlayAfterPickup) {
+                        $game->has_picked_up = true;
+                    } else {
+                        $game->current_turn  = (int) $this->nextPlayerId($room, (int) $game->current_turn);
+                        $game->has_picked_up = false;
+                    }
+                    $game->save();
+                }
 
             } else {
-                $playerIds = $room->players()
-                    ->orderBy('room_user.created_at')
-                    ->pluck('users.id')
-                    ->toArray();
-
-                $currentIndex = array_search((int) $game->current_turn, $playerIds, true);
-                if ($currentIndex === false) {
-                    $currentIndex = -1;
-                }
-
-                $nextIndex = ($currentIndex + 1) % max(count($playerIds), 1);
-                $game->current_turn  = $playerIds[$nextIndex] ?? null;
+                // ── Player already drew — tapping deck again passes the turn ─────────
+                $game->current_turn  = (int) $this->nextPlayerId($room, (int) $game->current_turn);
                 $game->has_picked_up = false;
                 $game->save();
+                $drawnCount = 0;
             }
 
             $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
             $deckCount  = count($deck);
 
-            return [$game, $playerHand, $handCounts, $deckCount, $drawn];
+            return [$game, $playerHand, $handCounts, $deckCount, $drawnCard ?? null, $drawnCount ?? 0];
         });
 
         // Broadcast after commit with consistent data
@@ -1018,9 +1035,10 @@ class CardGameController extends Controller
             'hand_counts'    => $handCounts,
             'deck_count'     => $deckCount,
             'used_cards'     => $game->used_cards ?? [],
-            'current_turn'   => $game->current_turn,
+            'current_turn'   => (int) $game->current_turn,
             'game_status'    => $game->game_status ?? 'in_progress',
             'pickup_penalty' => (int) ($game->pickup_penalty ?? 0),
+            'drawn_count'    => $drawnCount,
         ], 200);
     }
 

@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React from 'react';
+import { LogOut, MessageCircle, X } from 'lucide-react';
 
 type Props = {
   isChatOpen: boolean;
@@ -7,68 +8,29 @@ type Props = {
 };
 
 export const GameControls: React.FC<Props> = ({ isChatOpen, toggleChat, leaveGame }) => {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  // Close popout when clicking outside
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [menuOpen]);
-
   return (
-    <div className="flex items-center justify-end w-full max-w-5xl px-2 gap-2">
-      {/* Desktop: full buttons */}
+    <div className="flex flex-col items-stretch gap-2 rounded-xl border border-sidebar-border/70 bg-sidebar/95 p-2 shadow-lg backdrop-blur-sm">
       <button
         type="button"
         onClick={toggleChat}
-        className="hidden md:inline-flex px-3 py-1.5 rounded-lg bg-neutral-700/80 text-white text-sm hover:bg-neutral-600 transition"
+        className={[
+          'inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm transition outline-none',
+          'ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2',
+          isChatOpen ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground',
+        ].join(' ')}
       >
-        {isChatOpen ? '✕ Chat' : '💬 Chat'}
+        {isChatOpen ? <X className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
+        <span>{isChatOpen ? 'Close Chat' : 'Open Chat'}</span>
       </button>
+
       <button
         type="button"
         onClick={leaveGame}
-        className="hidden md:inline-flex px-3 py-1.5 rounded-lg bg-red-900/60 text-red-200 text-sm hover:bg-red-800/80 transition"
+        className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm text-red-300 transition outline-none hover:bg-red-500/15 hover:text-red-200 focus-visible:ring-2 focus-visible:ring-red-400/60"
       >
-        Leave
+        <LogOut className="h-4 w-4" />
+        <span>Leave Room</span>
       </button>
-
-      {/* Mobile: ⋮ popout */}
-      <div ref={menuRef} className="md:hidden relative">
-        <button
-          type="button"
-          onClick={() => setMenuOpen((o) => !o)}
-          className="px-3 py-1.5 rounded-lg bg-neutral-700/80 text-white text-sm hover:bg-neutral-600 transition"
-          aria-label="Game menu"
-        >
-          ⋮
-        </button>
-        {menuOpen && (
-          <div className="absolute bottom-full mb-2 right-0 z-50 flex flex-col gap-1 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl p-2 min-w-[120px]">
-            <button
-              type="button"
-              onClick={() => { toggleChat(); setMenuOpen(false); }}
-              className="px-3 py-2 rounded-lg bg-neutral-700/80 text-white text-sm hover:bg-neutral-600 transition text-left"
-            >
-              {isChatOpen ? '✕ Close Chat' : '💬 Chat'}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setMenuOpen(false); leaveGame(); }}
-              className="px-3 py-2 rounded-lg bg-red-900/60 text-red-200 text-sm hover:bg-red-800/80 transition text-left"
-            >
-              🚪 Leave
-            </button>
-          </div>
-        )}
-      </div>
     </div>
   );
 };

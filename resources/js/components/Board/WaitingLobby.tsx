@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { updateRoomSettingsApi } from '@/utils/api';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 
-type Player = { id: number; name?: string; role?: string };
+type Player = { id: number; name?: string; role?: string; avatar_url?: string | null };
 
 type RoomRulesShape = {
   max_players: number;
@@ -84,7 +84,7 @@ export const WaitingLobby: React.FC<Props> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-zinc-950 border border-white/10 rounded-2xl p-6 w-full max-w-sm text-zinc-100 space-y-5 shadow-2xl max-h-[90dvh] overflow-y-auto">
         {/* Room code */}
         <div className="text-center">
@@ -103,7 +103,7 @@ export const WaitingLobby: React.FC<Props> = ({
                 key={p.id}
                 className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5"
               >
-                <PlayerAvatar id={p.id} name={p.name} size={26} />
+                <PlayerAvatar id={p.id} name={p.name} size={26} avatarUrl={p.avatar_url} />
                 <span className="text-sm truncate">{p.name ?? `Player ${p.id}`}</span>
                 {p.id === userId && (
                   <span className="ml-auto text-[10px] text-cyan-400 font-semibold uppercase tracking-wide flex-shrink-0">

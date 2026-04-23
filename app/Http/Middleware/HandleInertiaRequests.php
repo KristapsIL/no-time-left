@@ -43,7 +43,12 @@ class HandleInertiaRequests extends Middleware
             'name' => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
-                'user' => $request->user(),
+                'user' => $request->user() ? array_merge($request->user()->toArray(), [
+                    // Use a relative URL so it works regardless of APP_URL / Valet domain
+                    'avatar_url' => $request->user()->avatar_path
+                        ? '/storage/' . $request->user()->avatar_path
+                        : null,
+                ]) : null,
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

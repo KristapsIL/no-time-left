@@ -15,8 +15,8 @@ import { getTypedEcho } from '@/types/echo';
 import { getSeats } from '@/utils/getSeats';
 
 // ── Public types ────────────────────────────────────────────────────────────
-export type Player = { id: number; name?: string; role?: string };
-export type PlayerLite = { id: string; name?: string };
+export type Player = { id: number; name?: string; role?: string; avatar_url?: string | null };
+export type PlayerLite = { id: string; name?: string; avatar_url?: string | null };
 
 export type GameState = {
   hand: string[];
@@ -29,14 +29,14 @@ export type GameState = {
   pickupPenalty: number;
 };
 
-export type FlyingCard = { card: string; from: 'player' | 'bot' | 'peer' };
+export type FlyingCard = { card: string; from: 'bottom' | 'top' | 'left' | 'right' };
 
 // ── Internal types ──────────────────────────────────────────────────────────
 type Action =
   | { type: 'SERVER_SYNC'; payload: Partial<GameState> }
   | { type: 'SET_TURN'; turn: number | null };
 
-type PresenceMember = { id: number; name?: string };
+type PresenceMember = { id: number; name?: string; avatar_url?: string | null };
 
 export type GameEngineInput = {
   room: {
@@ -80,6 +80,12 @@ const getAddedCards = (prev: string[], next: string[]): string[] => {
   return added;
 };
 
+const removeOneCard = (cards: string[], card: string): string[] => {
+  const idx = cards.lastIndexOf(card);
+  if (idx === -1) return cards;
+  return [...cards.slice(0, idx), ...cards.slice(idx + 1)];
+};
+
 // ── Main hook ────────────────────────────────────────────────────────────────
 export function useGameEngine({
   room,
@@ -96,7 +102,8 @@ export function useGameEngine({
 }: GameEngineInput) {
   const uid = String(userId);
   const turnTimeoutSeconds = room.rules.turn_timeout_seconds ?? 5;
-  const stackingActive = Array.isArray(room.rules.rules) && room.rules.rules.includes('stacking');
+  const stackingActive  = Array.isArray(room.rules.rules) && room.rules.rules.includes('stacking');
+  const plusTwoActive   = Array.isArray(room.rules.rules) && room.rules.rules.includes('plus_two');
 
   // ── Game state ──────────────────────────────────────────────────────────
   const [game, dispatch] = useReducer(gameReducer, {
@@ -120,6 +127,9 @@ export function useGameEngine({
   const [drawDecisionTimeLeft, setDrawDecisionTimeLeft] = useState(5);
   const [flyingCard, setFlyingCard] = useState<FlyingCard | null>(null);
   const [isFlying, setIsFlying] = useState(false);
+  const [isPickingUp, setIsPickingUp] = useState(false);
+  const [pickingUpCount, setPickingUpCount] = useState(0);
+  const [peerPickupAnims, setPeerPickupAnims] = useState<Array<{ id: number; direction: FlyingCard['from']; count: number }>>([]);
   const [connectedPlayers, setConnectedPlayers] = useState<Player[]>(room.players ?? []);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
@@ -135,6 +145,8 @@ export function useGameEngine({
   const connectedPlayersRef = useRef<Player[]>(room.players ?? []);
   const staticRoomPlayersRef = useRef<Player[]>(room.players ?? []);
   const pickingUpRef = useRef(false);
+  const pickupAnimEndRef = useRef(0);
+  const suppressDecisionRef = useRef(false);
   const lastSnapshotRef = useRef<GameState | null>(null);
 
   useEffect(() => { gameRef.current = game; }, [game]);
@@ -154,7 +166,7 @@ export function useGameEngine({
   }, []);
 
   const beginPlacement = useCallback(
-    (card: string | null, durationMs = 700, from: FlyingCard['from'] = 'peer') => {
+    (card: string | null, durationMs = 700, from: FlyingCard['from'] = 'top') => {
       clearPlacementTimeout();
       setPlacingCard(card);
       setIsPlacementLocked(true);
@@ -201,24 +213,40 @@ export function useGameEngine({
       game.status !== 'in_progress' ||
       isPlacementLocked ||
       isBotActionPending ||
-      showDrawnPlayOption
+      showDrawnPlayOption ||
+      isPickingUp
     ) return;
     const timer = window.setInterval(() => setTurnTimeLeft((c) => Math.max(c - 1, 0)), 1000);
     return () => window.clearInterval(timer);
-  }, [game.currentTurn, game.status, isPlacementLocked, isBotActionPending, showDrawnPlayOption]);
+  }, [game.currentTurn, game.status, isPlacementLocked, isBotActionPending, showDrawnPlayOption, isPickingUp]);
 
   // ── Draw-decision countdown ─────────────────────────────────────────────
   useEffect(() => {
     if (!showDrawnPlayOption) return;
-    setDrawDecisionTimeLeft(5);
+      setDrawDecisionTimeLeft(5);
     const timer = window.setInterval(() => setDrawDecisionTimeLeft((c) => Math.max(c - 1, 0)), 1000);
     return () => window.clearInterval(timer);
   }, [showDrawnPlayOption]);
 
   useEffect(() => {
     if (!showDrawnPlayOption || drawDecisionTimeLeft > 0) return;
+    const card = drawnCards[0];
     setShowDrawnPlayOption(false);
     setDrawnCards([]);
+    if (card) {
+      startTransition(() => {
+        dispatch({
+          type: 'SERVER_SYNC',
+          payload: {
+            hand: [...gameRef.current.hand, card],
+            handCounts: {
+              ...gameRef.current.handCounts,
+              [uid]: (gameRef.current.handCounts[uid] ?? gameRef.current.hand.length) + 1,
+            },
+          },
+        });
+      });
+    }
     if (game.currentTurn === userId) {
       passTurnApi(room.id)
         .then((d) => {
@@ -226,7 +254,7 @@ export function useGameEngine({
         })
         .catch(() => toast.error('Unable to keep drawn card automatically.'));
     }
-  }, [drawDecisionTimeLeft, game.currentTurn, room.id, showDrawnPlayOption, toast, userId]);
+  }, [drawDecisionTimeLeft, drawnCards, game.currentTurn, room.id, showDrawnPlayOption, toast, uid, userId]);
 
   const isMyTurn = useMemo(() => game.currentTurn === userId, [game.currentTurn, userId]);
 
@@ -236,6 +264,25 @@ export function useGameEngine({
     setShowDrawnPlayOption(false);
     setDrawnCards([]);
   }, [isMyTurn, showDrawnPlayOption]);
+
+  const keepDrawnCard = useCallback(() => {
+    const card = drawnCards[0];
+    setShowDrawnPlayOption(false);
+    setDrawnCards([]);
+    if (!card) return;
+    startTransition(() => {
+      dispatch({
+        type: 'SERVER_SYNC',
+        payload: {
+          hand: [...gameRef.current.hand, card],
+          handCounts: {
+            ...gameRef.current.handCounts,
+            [uid]: (gameRef.current.handCounts[uid] ?? gameRef.current.hand.length) + 1,
+          },
+        },
+      });
+    });
+  }, [drawnCards, uid]);
 
   // ── Actions ─────────────────────────────────────────────────────────────
   const passTurn = useCallback(async () => {
@@ -263,7 +310,7 @@ export function useGameEngine({
         },
       });
       try {
-        beginPlacement(card, 720, 'player');
+        beginPlacement(card, 720, 'bottom');
         await playCardApi(room.id, card);
       } catch (err) {
         if (lastSnapshotRef.current) dispatch({ type: 'SERVER_SYNC', payload: lastSnapshotRef.current });
@@ -273,9 +320,13 @@ export function useGameEngine({
     [isMyTurn, room.id, uid, toast, beginPlacement],
   );
 
-  const pickupCard = useCallback(async () => {
+  const pickupCard = useCallback(async (suppressDecision = false) => {
     if (!isMyTurn || pickingUpRef.current) return null;
     pickingUpRef.current = true;
+    suppressDecisionRef.current = suppressDecision;
+    const penaltyCount = Math.min(Math.max(gameRef.current.pickupPenalty, 1), 5);
+    setIsPickingUp(true);
+    setPickingUpCount(penaltyCount);
     try {
       const prevHand = [...gameRef.current.hand];
       const data = await pickupCardApi(room.id);
@@ -283,13 +334,25 @@ export function useGameEngine({
       const added = getAddedCards(prevHand, syncedHand);
       const topAfter = (data.used_cards ?? []).at(-1) ?? gameRef.current.topCard;
       const playableDrawn = added.filter((c: string) => isValidPlay(c, topAfter));
+      const nextTurn =
+        typeof data.current_turn === 'number'
+          ? data.current_turn
+          : gameRef.current.currentTurn;
+      const shouldOfferDrawn =
+        playableDrawn.length > 0 &&
+        nextTurn === userId &&
+        !suppressDecisionRef.current;
+      const decisionCard = shouldOfferDrawn ? playableDrawn[playableDrawn.length - 1] : null;
+      const visibleAdded = decisionCard ? removeOneCard(added, decisionCard) : added;
+
+      // Use server-reported count for animation
+      const animCount = Math.min(Math.max(data.drawn_count ?? penaltyCount, 1), 7);
+      setPickingUpCount(animCount);
 
       startTransition(() => {
         dispatch({
           type: 'SERVER_SYNC',
           payload: {
-            hand: data.hand ?? gameRef.current.hand,
-            handCounts: data.hand_counts ?? gameRef.current.handCounts,
             deckCount: typeof data.deck_count === 'number' ? data.deck_count : gameRef.current.deckCount,
             topCard: topAfter,
           },
@@ -297,24 +360,87 @@ export function useGameEngine({
         if (typeof data.current_turn === 'number') dispatch({ type: 'SET_TURN', turn: data.current_turn });
       });
 
-      if (playableDrawn.length > 0 && data.current_turn === userId) {
-        setDrawnCards(playableDrawn);
-        setShowDrawnPlayOption(true);
-        turnExpiredRef.current = false;
-        setTurnTimeLeft((c) => Math.max(c, 5));
-      } else if (playableDrawn.length === 0 && data.current_turn === userId) {
-        try {
-          const pd = await passTurnApi(room.id);
-          if (typeof pd.current_turn === 'number') dispatch({ type: 'SET_TURN', turn: pd.current_turn });
-        } catch { /* ignore */ }
+      // Deck was truly empty — skip animation and pass turn immediately
+      if (data.drawn_count === 0) {
+        setIsPickingUp(false);
+        setPickingUpCount(0);
+        pickingUpRef.current = false;
+        suppressDecisionRef.current = false;
+        // Also sync the hand immediately in the empty-deck case
+        startTransition(() => {
+          dispatch({
+            type: 'SERVER_SYNC',
+            payload: {
+              hand: data.hand ?? gameRef.current.hand,
+              handCounts: data.hand_counts ?? gameRef.current.handCounts,
+            },
+          });
+        });
+        if (nextTurn === userId) {
+          passTurnApi(room.id)
+            .then((d) => { if (typeof d.current_turn === 'number') dispatch({ type: 'SET_TURN', turn: d.current_turn }); })
+            .catch(() => {});
+        }
+        return data;
       }
+
+      // Match CSS timing: 480ms duration, 150ms stagger
+      const clearDelay = (animCount - 1) * 150 + 480 + 200;
+      pickupAnimEndRef.current = Date.now() + clearDelay + 100;
+
+      // Cards land in hand one-by-one as each card-back animation finishes
+      const snapshot = [...prevHand];
+      const cardsToAnimate = Math.min(animCount, visibleAdded.length);
+      for (let i = 0; i < cardsToAnimate; i++) {
+        window.setTimeout(() => {
+          startTransition(() => {
+            dispatch({
+              type: 'SERVER_SYNC',
+              payload: { hand: [...snapshot, ...visibleAdded.slice(0, i + 1)] },
+            });
+          });
+        }, i * 150 + 480 + 50);
+      }
+
+      window.setTimeout(() => {
+        // Final sync: ensure hand + counts match server state exactly
+        const serverHand = data.hand ?? gameRef.current.hand;
+        const handForDecision = decisionCard ? removeOneCard(serverHand, decisionCard) : serverHand;
+        startTransition(() => {
+          dispatch({
+            type: 'SERVER_SYNC',
+            payload: {
+              hand: handForDecision,
+              handCounts: data.hand_counts ?? gameRef.current.handCounts,
+            },
+          });
+        });
+        setIsPickingUp(false);
+        setPickingUpCount(0);
+        pickingUpRef.current = false;
+        // Show the playable card AFTER all card-back animations have landed
+        if (decisionCard) {
+          setDrawnCards([decisionCard]);
+          setShowDrawnPlayOption(true);
+          turnExpiredRef.current = false;
+          setTurnTimeLeft((c) => Math.max(c, 5));
+        } else if (suppressDecisionRef.current && nextTurn === userId) {
+          // Timer expired with a playable drawn card — auto-pass
+          passTurnApi(room.id)
+            .then((d) => { if (typeof d.current_turn === 'number') dispatch({ type: 'SET_TURN', turn: d.current_turn }); })
+            .catch(() => {});
+        }
+        suppressDecisionRef.current = false;
+      }, clearDelay);
 
       return data;
     } catch (err) {
+      setIsPickingUp(false);
+      setPickingUpCount(0);
+      pickingUpRef.current = false;
+      suppressDecisionRef.current = false;
       toast.error((err as Error)?.message ?? 'Failed to pick up card.');
       return null;
-    } finally {
-      pickingUpRef.current = false;
     }
   }, [isMyTurn, room.id, toast, userId]);
 
@@ -351,21 +477,41 @@ export function useGameEngine({
     pickupCard();
   }, [isMyTurn, pickupCard, turnTimeLeft, isPlacementLocked, isBotActionPending, showDrawnPlayOption]);
 
+  // ── Auto-pickup: when a +2 penalty is pending and the player can't stack ──
+  const autoPickedUpRef = useRef(false);
+  useEffect(() => {
+    if (!isMyTurn || !plusTwoActive || game.pickupPenalty <= 0) {
+      autoPickedUpRef.current = false;
+      return;
+    }
+    if (isPlacementLocked || isBotActionPending || pickingUpRef.current) return;
+    if (autoPickedUpRef.current) return;
+
+    // Player can stack if stacking is on AND they have a 2 in hand
+    const canStack =
+      stackingActive && game.hand.some((c) => c.startsWith('2-'));
+
+    if (!canStack) {
+      autoPickedUpRef.current = true;
+      pickupCard();
+    }
+  }, [isMyTurn, plusTwoActive, stackingActive, game.pickupPenalty, game.hand, isPlacementLocked, isBotActionPending, pickupCard]);
+
   const handleTurnExpiry = useCallback(async () => {
     try {
-      const data = await pickupCard();
-      if (data && data.current_turn === userId) await passTurn();
+      // Pass suppressDecision=true so pickupCard auto-passes instead of showing the play option
+      await pickupCard(true);
     } catch { /* ignore */ }
-  }, [pickupCard, passTurn, userId]);
+  }, [pickupCard]);
 
   useEffect(() => {
-    if (isPlacementLocked || isBotActionPending || showDrawnPlayOption) return;
+    if (isPlacementLocked || isBotActionPending || showDrawnPlayOption || isPickingUp) return;
     if (turnTimeLeft !== 0 || !isMyTurn || game.status !== 'in_progress') return;
     if (turnExpiredRef.current || turnJustStartedRef.current) return;
     turnExpiredRef.current = true;
     toast.error('Time is up! Your turn has ended.');
     handleTurnExpiry();
-  }, [turnTimeLeft, isMyTurn, game.status, handleTurnExpiry, toast, isPlacementLocked, isBotActionPending, showDrawnPlayOption]);
+  }, [turnTimeLeft, isMyTurn, game.status, handleTurnExpiry, toast, isPlacementLocked, isBotActionPending, showDrawnPlayOption, isPickingUp]);
 
   const startGame = useCallback(() => {
     if (isStartingGame) return;
@@ -400,13 +546,13 @@ export function useGameEngine({
     if (!channel) return;
 
     channel.here((members: PresenceMember[]) => {
-      const players = (members ?? []).map((m) => ({ id: m.id, name: m.name ?? `Player ${m.id}` }));
+      const players = (members ?? []).map((m) => ({ id: m.id, name: m.name ?? `Player ${m.id}`, avatar_url: m.avatar_url ?? null }));
       setConnectedPlayers(uniqById([...(staticRoomPlayersRef.current ?? []), ...players]));
     });
 
     channel.joining((m: PresenceMember) => {
       setConnectedPlayers((prev) =>
-        uniqById([...(prev ?? []), { id: m.id, name: m.name ?? `Player ${m.id}` }]),
+        uniqById([...(prev ?? []), { id: m.id, name: m.name ?? `Player ${m.id}`, avatar_url: m.avatar_url ?? null }]),
       );
     });
 
@@ -471,12 +617,25 @@ export function useGameEngine({
         deckCount?: number;
         turn_player_id?: number;
         turnPlayerId?: number;
+        pickup_penalty?: number;
       };
       const actorId = typeof data.player_id === 'number' ? data.player_id : null;
       const playedCard = typeof data.card === 'string' ? data.card : '';
       const isBotActor =
         actorId !== null &&
         connectedPlayersRef.current.some((p) => p.id === actorId && p.role === 'bot');
+
+      // Determine which direction the card comes from based on actor's seat
+      const getActorFrom = (id: number | null): FlyingCard['from'] => {
+        if (id === userId) return 'bottom';
+        if (id === null) return 'top';
+        const liteId = String(id);
+        const lite = uniqById(connectedPlayersRef.current).map((p) => ({ id: String(p.id), name: p.name }));
+        const s = getSeats(lite, uid);
+        if (s.left?.id === liteId) return 'left';
+        if (s.right?.id === liteId) return 'right';
+        return 'top';
+      };
       const used = data.used_cards ?? data.usedCards ?? [];
       const eventHC = data.hand_counts ?? data.handCounts;
       const eventDC =
@@ -493,12 +652,12 @@ export function useGameEngine({
             : null;
 
       const applyCardPlayed = () => {
-        if (playedCard) beginPlacement(playedCard, isBotActor ? 900 : 720, isBotActor ? 'bot' : 'peer');
+        if (playedCard) beginPlacement(playedCard, isBotActor ? 900 : 720, getActorFrom(actorId));
         const patch: Partial<GameState> = {};
         if (used.length) patch.topCard = used[used.length - 1];
         if (eventHC) patch.handCounts = eventHC;
         if (typeof eventDC === 'number') patch.deckCount = eventDC;
-        if (typeof (data as any).pickup_penalty === 'number') patch.pickupPenalty = (data as any).pickup_penalty;
+        if (typeof data.pickup_penalty === 'number') patch.pickupPenalty = data.pickup_penalty;
         if (Object.keys(patch).length) dispatch({ type: 'SERVER_SYNC', payload: patch });
         if (eventTurn !== null) dispatch({ type: 'SET_TURN', turn: eventTurn });
       };
@@ -534,8 +693,42 @@ export function useGameEngine({
         usedCards?: string[];
         turn_player_id?: number | null;
         turnPlayerId?: number | null;
+        pickup_penalty?: number;
       };
-      if ((d.user_id ?? d.userId) !== userId) return;
+      const actorId = d.user_id ?? d.userId;
+
+      if (actorId !== userId) {
+        // Another player picked up cards — update shared counts + show their pickup anim
+        const newHC = d.hand_counts ?? d.handCounts;
+        if (newHC) {
+          const actorStr = String(actorId);
+          const prevCount = gameRef.current.handCounts[actorStr] ?? 0;
+          const delta = Math.max(0, (newHC[actorStr] ?? 0) - prevCount);
+          if (delta > 0) {
+            const liteList = uniqById(connectedPlayersRef.current).map((p) => ({ id: String(p.id), name: p.name }));
+            const s = getSeats(liteList, uid);
+            let direction: FlyingCard['from'] = 'top';
+            if (actorStr === s.left?.id) direction = 'left';
+            else if (actorStr === s.right?.id) direction = 'right';
+            const animId = Date.now() + Math.random();
+            setPeerPickupAnims((prev) => [...prev, { id: animId, direction, count: Math.min(delta, 5) }]);
+            window.setTimeout(() => {
+              setPeerPickupAnims((prev) => prev.filter((a) => a.id !== animId));
+            }, (Math.min(delta, 5) - 1) * 150 + 480 + 300);
+          }
+          const dc = typeof d.deck_count === 'number' ? d.deck_count
+            : typeof d.deckCount === 'number' ? d.deckCount : undefined;
+          const patch: Partial<GameState> = { handCounts: newHC };
+          if (typeof dc === 'number') patch.deckCount = dc;
+          dispatch({ type: 'SERVER_SYNC', payload: patch });
+        }
+        return;
+      }
+
+      // Ignore immediate self hand-sync while pickup animation is in progress.
+      // pickupCard() applies staged/final hand updates on its own timeline.
+      if (pickingUpRef.current) return;
+
       const dc =
         typeof d.deck_count === 'number'
           ? d.deck_count
@@ -557,7 +750,7 @@ export function useGameEngine({
             handCounts: (d.hand_counts ?? d.handCounts) ?? gameRef.current.handCounts,
             deckCount: dc,
             topCard: ((d.used_cards ?? d.usedCards) ?? []).at(-1) ?? gameRef.current.topCard,
-            pickupPenalty: typeof (d as any).pickup_penalty === 'number' ? (d as any).pickup_penalty : gameRef.current.pickupPenalty,
+            pickupPenalty: typeof d.pickup_penalty === 'number' ? d.pickup_penalty : gameRef.current.pickupPenalty,
           },
         });
         if (turn !== null) dispatch({ type: 'SET_TURN', turn });
@@ -590,8 +783,17 @@ export function useGameEngine({
         dispatch({ type: 'SET_TURN', turn: null });
       };
 
-      // Wait for any pending bot animations before showing the modal
-      const remaining = botActionAvailableAtRef.current - Date.now();
+      // Wait for all in-flight animations before showing the game-over modal
+      // If a bot action is still pending we must also wait for the 900ms placement animation it triggers
+      const botWait = botActionAvailableAtRef.current - Date.now();
+      const botRemaining = pendingBotActionsRef.current > 0
+        ? Math.max(botWait + 900, 900)   // pending bot delay + placement animation
+        : Math.max(0, botWait);
+      const remaining = Math.max(
+        botRemaining,
+        placementTimeoutRef.current !== null ? 900 : 0,
+        pickupAnimEndRef.current - Date.now(),
+      );
       if (remaining > 0) {
         window.setTimeout(applyFinish, remaining + 200);
       } else {
@@ -660,7 +862,7 @@ export function useGameEngine({
 
   // ── Derived values ───────────────────────────────────────────────────────
   const connectedPlayersLite = useMemo<PlayerLite[]>(
-    () => uniqById(connectedPlayers).map((p) => ({ id: String(p.id), name: p.name })),
+    () => uniqById(connectedPlayers).map((p) => ({ id: String(p.id), name: p.name, avatar_url: p.avatar_url })),
     [connectedPlayers],
   );
 
@@ -704,9 +906,13 @@ export function useGameEngine({
     isPlacementLocked,
     placingCard,
     isBotActionPending,
+    isPickingUp,
+    pickingUpCount,
+    peerPickupAnims,
     // Draw interaction
     drawnCards,
     showDrawnPlayOption,
+    keepDrawnCard,
     setShowDrawnPlayOption,
     setDrawnCards,
     // UI

@@ -21,6 +21,10 @@ type Props = {
   minSliver?: number;
   maxStepFrac?: number;
   hoverSpread?: number;
+
+  pickupPenalty?: number;
+  stackingActive?: boolean;
+  plusTwoActive?: boolean;
 };
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
@@ -53,6 +57,9 @@ export const PlayerHand: React.FC<Props> = React.memo(
     minSliver = 12,
     maxStepFrac = 0.95,
     hoverSpread = 16,
+    pickupPenalty = 0,
+    stackingActive = false,
+    plusTwoActive = false,
   }) => {
     const [hovered, setHovered] = useState<number | null>(null);
 
@@ -125,7 +132,9 @@ export const PlayerHand: React.FC<Props> = React.memo(
     // ── Mobile card constants ─────────────────────────────────────────────
     const MOBILE_CARD_W = 70;
     const MOBILE_CARD_H = 104;
-    const MOBILE_LIFT_PX = 46;
+    // Lifted card goes up this many px when selected/dragged
+    // Keep below z-40 GameOverModal — normal cards z=idx+1, lifted z=20
+    const MOBILE_LIFT_PX = 60;
 
     // Absolute X positions so all cards fit in the container, no scroll
     const mobilePositions = useMemo(() => {
@@ -183,10 +192,10 @@ export const PlayerHand: React.FC<Props> = React.memo(
         setDragIdx(null);
         if (playIdx !== null && isMyTurn) {
           const card = hand[playIdx];
-          if (card && isValidPlay(card, topCard)) playCard(card);
+          if (card && isValidPlay(card, topCard, pickupPenalty, stackingActive)) playCard(card);
         }
       },
-      [computeCardIdxFromX, hand, isMyTurn, topCard, playCard]
+      [computeCardIdxFromX, hand, isMyTurn, topCard, pickupPenalty, stackingActive, playCard]
     );
 
     const onMobilePointerCancel = useCallback(() => setDragIdx(null), []);
@@ -328,6 +337,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
                           card={card}
                           disabled={!canPlay}
                           selected={false}
+                          showPlusTwoLabel={plusTwoActive}
                           onClick={() => {
                             if (canPlay) playCard(card);
                           }}
@@ -358,9 +368,9 @@ export const PlayerHand: React.FC<Props> = React.memo(
           ref={mobileRef}
           className="sm:hidden relative w-full select-none"
           style={{
-            height: MOBILE_CARD_H + MOBILE_LIFT_PX + 8,
+            height: MOBILE_CARD_H + MOBILE_LIFT_PX + 16,
             touchAction: 'none',
-            paddingBottom: 'max(env(safe-area-inset-bottom), 4px)',
+            paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
           }}
           onPointerDown={onMobilePointerDown}
           onPointerMove={onMobilePointerMove}
@@ -370,7 +380,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
           aria-label="Your hand"
         >
           {hand.map((card, idx) => {
-            const canPlay = isMyTurn && isValidPlay(card, topCard);
+            const canPlay = isMyTurn && isValidPlay(card, topCard, pickupPenalty, stackingActive);
             const isLifted = dragIdx === idx;
 
             const staggerOrder = newCardAnimData.get(idx) ?? -1;
@@ -384,7 +394,8 @@ export const PlayerHand: React.FC<Props> = React.memo(
                 className="absolute bottom-0 transition-transform duration-100 ease-out"
                 style={{
                   left: mobilePositions[idx] ?? 0,
-                  zIndex: 100 + idx + (isLifted ? 1000 : 0),
+                  // Keep z-indexes low (max ~20 for lifted) so GameOverModal at z-40 paints above
+                  zIndex: isLifted ? 20 : idx + 1,
                   transform: isLifted ? `translateY(-${MOBILE_LIFT_PX}px)` : 'none',
                 }}
               >
@@ -392,15 +403,16 @@ export const PlayerHand: React.FC<Props> = React.memo(
                   card={card}
                   disabled={false}
                   selected={isLifted}
+                  showPlusTwoLabel={plusTwoActive}
                   className={[
                     'shadow-md pointer-events-none',
                     isLifted && canPlay
                       ? 'ring-2 ring-yellow-400 ring-offset-1 ring-offset-emerald-900'
                       : isLifted
-                      ? 'ring-2 ring-white/50 ring-offset-1'
+                      ? 'ring-2 ring-white/60 ring-offset-1'
                       : canPlay
-                      ? 'ring-1 ring-yellow-400/40'
-                      : 'opacity-90',
+                      ? 'ring-2 ring-yellow-400 ring-offset-1 ring-offset-emerald-900'
+                      : '',
                   ].join(' ')}
                   style={{ width: MOBILE_CARD_W, height: MOBILE_CARD_H, ...dealStyle }}
                   aria-disabled={!canPlay}

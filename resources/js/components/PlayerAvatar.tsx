@@ -16,7 +16,8 @@ export const PlayerAvatar: React.FC<{
   name?: string;
   size?: number;
   className?: string;
-}> = ({ id, name, size = 28, className = '' }) => {
+  avatarUrl?: string | null;
+}> = ({ id, name, size = 28, className = '', avatarUrl }) => {
   const numId = typeof id === 'number' ? id : parseInt(String(id), 10) || 0;
   const color = PALETTE[Math.abs(numId) % PALETTE.length];
 
@@ -26,6 +27,18 @@ export const PlayerAvatar: React.FC<{
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? '')
     .join('') || '?';
+
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name ?? 'Player'}
+        className={`rounded-full object-cover flex-shrink-0 ${className}`}
+        style={{ width: size, height: size }}
+        aria-label={name ?? 'Player'}
+      />
+    );
+  }
 
   return (
     <div

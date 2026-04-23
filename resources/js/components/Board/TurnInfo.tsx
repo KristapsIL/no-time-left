@@ -2,6 +2,7 @@ import React from 'react';
 
 type Props = {
   currentTurn: number | null;
+  currentTurnName?: string | null;
   userId: number;
   turnTimeLeft: number;
   isPlacementLocked: boolean;
@@ -11,6 +12,7 @@ type Props = {
 
 export const TurnInfo: React.FC<Props> = ({
   currentTurn,
+  currentTurnName,
   userId,
   turnTimeLeft,
   isPlacementLocked,
@@ -23,11 +25,11 @@ export const TurnInfo: React.FC<Props> = ({
         <div>
           Turn:{' '}
           <span className="font-semibold">
-            {currentTurn === userId ? 'You' : `Player ${currentTurn}`}
+            {currentTurn === userId ? 'You' : (currentTurnName ?? `Player ${currentTurn}`)}
           </span>
         </div>
         <div className="text-sm text-indigo-600 dark:text-indigo-300">
-          {currentTurn === userId ? 'Your turn' : 'Opponent turn'}: {turnTimeLeft}s
+          {currentTurn === userId ? 'Your turn' : `${currentTurnName ?? `Player ${currentTurn}`}'s turn`}: {turnTimeLeft}s
         </div>
       </div>
     )}
