@@ -31,7 +31,7 @@ export const OpponentHandRail: React.FC<OpponentHandRailProps> = ({
         className="w-full h-full flex flex-col items-center justify-start gap-1.5 py-2"
         style={{ overflow: 'visible' }}
       >
-        {/* Label — always upright, above the fan */}
+        {/* Etiķete vienmēr taisna, virs fana */}
         {label && (
           <div
             className={[
@@ -44,7 +44,7 @@ export const OpponentHandRail: React.FC<OpponentHandRailProps> = ({
           </div>
         )}
 
-        {/* Rotated fan */}
+        {/* Pagriezts fans */}
         <div
           className="relative flex-1 w-full"
           style={{ overflow: 'visible', minHeight: 60 }}

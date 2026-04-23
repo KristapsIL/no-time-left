@@ -346,7 +346,7 @@ export default function Welcome() {
                                 </div>
 
                                 <div className="flex flex-col gap-4 rounded-2xl border border-emerald-900/20 bg-[#14532d] p-4 dark:border-cyan-400/20 dark:bg-[#08232d]">
-                                    {/* Bot Hand Section */}
+                                    {/* Bota roka */}
                                     <div>
                                         <p className="mb-2 text-xs font-semibold text-white/60">BOT ({demo.botHand.length})</p>
                                         <div className="flex items-center gap-2">
@@ -364,16 +364,16 @@ export default function Welcome() {
                                         </div>
                                     </div>
 
-                                    {/* Middle: Top Card + Deck */}
+                                    {/* Centrs: augšējā kārts + kavs */}
                                     <div className="flex items-center justify-between">
-                                        {/* Top Card */}
+                                        {/* Augšējā kārts */}
                                         <div className="flex-1">
                                             <div className="mx-auto h-24 w-16">
                                                 <DemoCardFace card={demo.topCard} className="h-24 w-16" />
                                             </div>
                                         </div>
 
-                                        {/* Deck & Info */}
+                                        {/* Kavs un informācija */}
                                         <div className="flex flex-col items-center gap-2">
                                             <div className="h-20 w-14 rounded-lg border-2 border-dashed border-white/30 bg-white/10 flex items-center justify-center">
                                                 <div className="text-center">
@@ -387,7 +387,7 @@ export default function Welcome() {
                                         </div>
                                     </div>
 
-                                    {/* Player Hand Section */}
+                                    {/* Spēlētāja roka */}
                                     <div>
                                         <p className="mb-2 text-xs font-semibold text-white/60">YOUR HAND ({demo.playerHand.length})</p>
                                         <div className="flex gap-2 overflow-x-auto pb-2">
@@ -414,7 +414,7 @@ export default function Welcome() {
                                         </div>
                                     </div>
 
-                                    {/* Status / Note */}
+                                    {/* Spēles stāvoklis */}
                                     {demo.status === 'finished' ? (
                                         <div className="rounded-lg bg-yellow-900/30 px-3 py-2 text-center">
                                             <p className="text-sm font-bold text-yellow-100">
@@ -426,7 +426,7 @@ export default function Welcome() {
                                     )}
                                 </div>
 
-                                {/* Controls */}
+                                {/* Vadīklas */}
                                 <div className="mt-4 flex flex-wrap gap-2">
                                     <button
                                         type="button"

@@ -272,7 +272,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
 
     return (
       <div className="w-full select-none">
-        {/* Desktop */}
+        {/* Dators */}
         <div
           className="hidden sm:block w-full"
           style={{ paddingLeft: edgeGutter, paddingRight: edgeGutter }}
@@ -364,7 +364,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
           </div>
         </div>
 
-        {/* Mobile — fan layout, all cards visible, no scroll */}
+        {/* Mobilais — fana izkārtojums, visas kārtis redzamas */}
         <div
           ref={mobileRef}
           className="sm:hidden relative w-full select-none"

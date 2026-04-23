@@ -78,18 +78,18 @@ export const CardView: React.FC<CardViewProps> = ({
       aria-label={`${rank}${suit}`}
       {...rest} // allow caller to override aria, tabIndex, handlers, etc.
     >
-      {/* Rank + suit top-left */}
+      {/* Rangs + zīme augšā pa kreisi */}
       <div className="absolute top-1 left-1 leading-none text-sm font-semibold">
         <div>{rank}</div>
         <div>{suit}</div>
       </div>
 
-      {/* Big suit centered */}
+      {/* Liela zīme centrā */}
       <div className="w-full h-full flex items-center justify-center">
         <div className="text-2xl">{suit}</div>
       </div>
 
-      {/* +2 badge when rule is active */}
+      {/* +2 nozīmīte ja noteikums ir aktīvs */}
       {showPlusTwoLabel && rank === '2' && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <span className="text-xs font-bold bg-amber-400 text-zinc-900 rounded px-1 leading-tight shadow">
@@ -98,7 +98,7 @@ export const CardView: React.FC<CardViewProps> = ({
         </div>
       )}
 
-      {/* Rank + suit bottom-right (mirrored) */}
+      {/* Rangs + zīme apakšā pa labi (apgriezts) */}
       <div className="absolute bottom-1 right-1 leading-none text-sm font-semibold rotate-180">
         <div>{rank}</div>
         <div>{suit}</div>

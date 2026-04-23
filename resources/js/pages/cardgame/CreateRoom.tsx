@@ -78,7 +78,7 @@ export default function CreateRoom() {
           >
             <div className="grid gap-6 md:grid-cols-2">
 
-            {/* Room Name */}
+            {/* Istabas nosaukums */}
             <div className="md:col-span-2">
               <label
                 htmlFor="room_name"
@@ -103,7 +103,7 @@ export default function CreateRoom() {
               </p>
             </div>
 
-            {/* Public Toggle */}
+            {/* Publiskas istabas slēdzis */}
             <div className="flex items-center justify-between gap-3 rounded-2xl border border-black/10 bg-black/[0.03] px-4 py-3 dark:border-white/10 dark:bg-white/5">
               <div>
                 <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Public Room</p>
@@ -112,7 +112,7 @@ export default function CreateRoom() {
               <Toggle checked={isPublic} onChange={() => setIsPublic((p) => !p)} />
             </div>
 
-            {/* Max Players */}
+            {/* Maks. spēlētāji */}
             <div>
               <label
                 htmlFor="max_players"
@@ -157,7 +157,7 @@ export default function CreateRoom() {
               </p>
             </div>
 
-            {/* Bots */}
+            {/* Boti */}
             <div className="md:col-span-2 flex items-center justify-between gap-3 rounded-2xl border border-black/10 bg-black/[0.03] px-4 py-3 dark:border-white/10 dark:bg-white/5">
               <div>
                 <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Enable Bots</p>
@@ -166,7 +166,7 @@ export default function CreateRoom() {
               <Toggle checked={botsEnabled} onChange={() => setBotsEnabled((p) => !p)} />
             </div>
 
-            {/* Rules */}
+            {/* Noteikumi */}
             <div className="md:col-span-2">
               <p className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Rules</p>
               <div className="space-y-2 rounded-2xl border border-black/10 bg-black/[0.03] p-3 dark:border-white/10 dark:bg-white/5" role="group" aria-label="Rules">
@@ -211,7 +211,7 @@ export default function CreateRoom() {
               </div>
             </div>
 
-            {/* Submit Button */}
+            {/* Nosūtīšanas poga */}
             <div className="md:col-span-2 flex justify-end pt-2">
               <button
                 type="submit"

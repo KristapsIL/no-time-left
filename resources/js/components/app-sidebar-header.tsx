@@ -54,7 +54,7 @@ const inlineEnd = (includeSafeArea && isMobile)
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 pointer-events-none" aria-label="App header">
-      {/* Desktop trigger: rides the sidebar edge */}
+      {/* Datora triggers — piestiprинāts sānpanekļa malai */}
       <SidebarTrigger
         className={[
           'pointer-events-auto fixed hidden md:inline-flex items-center gap-2 rounded-full',
@@ -84,7 +84,7 @@ const inlineEnd = (includeSafeArea && isMobile)
         <span className="text-sm font-medium">Menu</span>
       </SidebarTrigger>
 
-      {/* Mobile trigger: fixed bottom-right */}
+      {/* Mobilā poga — fiksēta apakšā pa labi */}
       <button
         type="button"
         onClick={toggleSidebar}

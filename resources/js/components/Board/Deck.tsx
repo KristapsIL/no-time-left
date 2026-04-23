@@ -28,7 +28,7 @@ export const Deck: React.FC<DeckProps> = React.memo(({ isMyTurn, pickupCard }) =
       }}
       title={!isMyTurn ? 'Wait your turn' : 'Draw a card'}
     >
-      {/* Stack effect */}
+      {/* Kaudzes efekts */}
       <div className="absolute" style={{ top: 4, left: 4, zIndex: 1 }}>
         <CardBack width={72} height={108} fillColor="#1f2937" bandColor="#0ea5e9" rimColor="rgba(0,0,0,0.35)" label="" />
       </div>

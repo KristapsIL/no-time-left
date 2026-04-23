@@ -81,7 +81,7 @@ export const CenterTable: React.FC<Props> = ({
     <div className="flex flex-col items-center gap-4 md:gap-6">
       <div className="relative flex gap-8 md:gap-12 items-center justify-center flex-wrap">
 
-        {/* ── My pickup: card backs fly from deck toward my hand ── */}
+        {/* Mana paņemšana — kāršu mugurpuses lido no kava uz roku */}
         {pickingUpCount > 0 && Array.from({ length: pickingUpCount }, (_, i) => (
           <div
             key={`self-${i}`}
@@ -92,7 +92,7 @@ export const CenterTable: React.FC<Props> = ({
           </div>
         ))}
 
-        {/* ── Peer pickups: card backs fly toward each opponent's seat ── */}
+        {/* Pretinieku paņemšana — kārtis lido uz viņu sēdvietām */}
         {peerPickupAnims.map(({ id, direction, count }) =>
           Array.from({ length: count }, (_, i) => (
             <div
@@ -108,7 +108,7 @@ export const CenterTable: React.FC<Props> = ({
           ))
         )}
 
-        {/* ── Placement animation: card flying from origin to top-card pile ── */}
+        {/* Likšanas animācija — kārts lido uz augšējo kaudzi */}
         {placingCard && flyingCard && isPlacementLocked && (
           <div
             className="pointer-events-none absolute left-1/2 top-1/2 z-30 transition-transform duration-700 ease-out"
@@ -122,7 +122,7 @@ export const CenterTable: React.FC<Props> = ({
           </div>
         )}
 
-        {/* ── Drawn card rendered in Board.tsx above the hand area ── */}
+        {/* Paceltas kārts UI atrodas Board.tsx virs rokas laukuma */}
 
         <Deck isMyTurn={deckClickable} pickupCard={onPickup} />
         <TopCard topCard={topCard} isPlacing={isPlacementLocked} />

@@ -98,7 +98,7 @@ export default function FindRoom({ rooms, auth }: Props) {
                     <h1 className="text-4xl font-bold mb-2 text-center text-zinc-900 dark:text-zinc-100" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Find a Room</h1>
                     <p className="text-center text-zinc-600 dark:text-zinc-300 mb-8">Join an existing table or jump into a fresh room.</p>
 
-                    {/* Join by code */}
+                    {/* Pievienoties ar kodu */}
                     <div className="mb-4 rounded-2xl border border-black/10 bg-white/80 p-4 dark:border-white/10 dark:bg-white/5">
                         <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-2">Join by room code</p>
                         <form

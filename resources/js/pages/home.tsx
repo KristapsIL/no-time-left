@@ -23,7 +23,7 @@ export default function Home() {
       <Head title="Home" />
       <div className="min-h-[100dvh] p-4 md:p-6">
         <div className="max-w-6xl mx-auto">
-          {/* Hero Section */}
+          {/* Galģenā sekcija */}
           <div className="text-center mb-10">
             <div className="relative">
               <h1 className="text-5xl md:text-7xl font-bold text-zinc-900 dark:text-zinc-100 mb-4 tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
@@ -47,7 +47,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Game Features */}
+          {/* Spēles īpašības */}
           <div className="grid md:grid-cols-3 gap-4 mb-10">
             <div className="bg-white/70 dark:bg-white/5 backdrop-blur-sm rounded-2xl p-5 text-center border border-black/10 dark:border-white/10">
               <div className="text-4xl mb-4">⚡</div>
@@ -74,7 +74,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* Darbības pogas */}
           <div className="text-center space-y-4 mb-10">
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button 
@@ -101,7 +101,7 @@ export default function Home() {
             </p>
           </div>
 
-          {/* How to Play */}
+          {/* Kā spēlēt */}
           <div className="bg-white/80 dark:bg-zinc-900/70 backdrop-blur-sm rounded-2xl p-6 md:p-8 border border-black/10 dark:border-white/10 shadow-lg">
             <h2 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 text-center mb-6">How to Play</h2>
             <div className="grid md:grid-cols-2 gap-8">
@@ -143,7 +143,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Footer */}
+          {/* Kājene */}
           <div className="text-center mt-10 pt-8 border-t border-zinc-200 dark:border-zinc-800">
             <p className="text-zinc-500 dark:text-zinc-400 text-sm">
               Developed by K. I. Liepins | Contact: ipb22.k.liepins@vtdt.edu.lv

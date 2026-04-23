@@ -144,7 +144,7 @@ const RoomChat: React.FC<RoomChatProps> = ({ roomId, isOpen, onClose }) => {
 
   return (
     <div className="fixed right-0 top-0 h-full w-80 bg-background border-l border-sidebar-border shadow-lg z-50 flex flex-col">
-      {/* Header */}
+      {/* Galvene */}
       <div className="flex items-center justify-between p-4 border-b border-sidebar-border bg-neutral-100 dark:bg-neutral-800">
         <div className="flex items-center gap-2">
           <MessageCircle className="w-5 h-5 text-blue-500" />
@@ -159,7 +159,7 @@ const RoomChat: React.FC<RoomChatProps> = ({ roomId, isOpen, onClose }) => {
         </button>
       </div>
 
-      {/* Messages */}
+      {/* Ziņojumi */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">
@@ -184,7 +184,7 @@ const RoomChat: React.FC<RoomChatProps> = ({ roomId, isOpen, onClose }) => {
         )}
       </div>
 
-      {/* Message Input */}
+      {/* Ziņas ievade */}
       <div className="border-t border-sidebar-border p-4">
         <form onSubmit={sendMessage} className="flex gap-2">
           <input
