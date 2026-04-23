@@ -39,6 +39,7 @@ type Props = {
   myHand?: string[];
   gameStatus?: 'waiting' | 'in_progress' | 'finished';
   currentTurn?: number | null;
+  turnStartedAt?: string | null;
   winnerId?: number | null;
   userId: number;
   creatorId?: number;
@@ -151,7 +152,7 @@ const MobileOpponentFan = memo(function MobileOpponentFan({
 // ── Board ─────────────────────────────────────────────────────────────────────
 export default function Board() {
   const { props } = usePage<Props>();
-  const { room, deck, usedCards, handCounts, myHand, gameStatus, currentTurn, winnerId, userId, creatorId, pickupPenalty } = props;
+  const { room, deck, usedCards, handCounts, myHand, gameStatus, currentTurn, turnStartedAt, winnerId, userId, creatorId, pickupPenalty } = props;
   const toast = useToast();
   const isCreator = userId === (creatorId ?? room.created_by ?? -1);
 
@@ -197,6 +198,7 @@ export default function Board() {
     initialHandCounts: handCounts ?? {},
     initialGameStatus: gameStatus ?? 'waiting',
     initialCurrentTurn: currentTurn ?? null,
+    initialTurnStartedAt: turnStartedAt ?? null,
     initialWinnerId: winnerId ?? null,
     initialPickupPenalty: pickupPenalty ?? 0,
     toast,

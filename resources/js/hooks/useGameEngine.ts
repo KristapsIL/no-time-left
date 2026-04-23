@@ -10,7 +10,7 @@ import {
 import { router } from '@inertiajs/react';
 import echo from '@/lib/echo';
 import { isValidPlay, uniqById } from '@/utils/gameLogic';
-import { playCardApi, pickupCardApi, passTurnApi, resyncStateApi, resetGameApi } from '@/utils/api';
+import { playCardApi, pickupCardApi, passTurnApi, resyncStateApi, resetGameApi, startGameApi } from '@/utils/api';
 import { getTypedEcho } from '@/types/echo';
 import { getSeats } from '@/utils/getSeats';
 
@@ -51,6 +51,7 @@ export type GameEngineInput = {
   initialHandCounts: Record<string, number>;
   initialGameStatus: 'waiting' | 'in_progress' | 'finished';
   initialCurrentTurn: number | null;
+  initialTurnStartedAt: string | null;
   initialWinnerId: number | null | undefined;
   initialPickupPenalty: number;
   toast: { error: (msg: string) => void };
@@ -96,6 +97,7 @@ export function useGameEngine({
   initialHandCounts,
   initialGameStatus,
   initialCurrentTurn,
+  initialTurnStartedAt,
   initialWinnerId,
   initialPickupPenalty,
   toast,
@@ -104,6 +106,13 @@ export function useGameEngine({
   const turnTimeoutSeconds = room.rules.turn_timeout_seconds ?? 5;
   const stackingActive  = Array.isArray(room.rules.rules) && room.rules.rules.includes('stacking');
   const plusTwoActive   = Array.isArray(room.rules.rules) && room.rules.rules.includes('plus_two');
+
+  // Compute remaining turn time from server-reported turn start.
+  const computeRemaining = (turnStartedAt: string | null) => {
+    if (!turnStartedAt) return null;
+    const elapsed = Math.floor((Date.now() - new Date(turnStartedAt).getTime()) / 1000);
+    return Math.max(0, turnTimeoutSeconds - elapsed);
+  };
 
   // ── Game state ──────────────────────────────────────────────────────────
   const [game, dispatch] = useReducer(gameReducer, {
@@ -118,7 +127,7 @@ export function useGameEngine({
   });
 
   // ── UI / animation state ────────────────────────────────────────────────
-  const [turnTimeLeft, setTurnTimeLeft] = useState(turnTimeoutSeconds);
+  const [turnTimeLeft, setTurnTimeLeft] = useState(() => computeRemaining(initialTurnStartedAt) ?? turnTimeoutSeconds);
   const [placingCard, setPlacingCard] = useState<string | null>(null);
   const [isPlacementLocked, setIsPlacementLocked] = useState(false);
   const [isBotActionPending, setIsBotActionPending] = useState(false);
@@ -148,6 +157,9 @@ export function useGameEngine({
   const pickupAnimEndRef = useRef(0);
   const suppressDecisionRef = useRef(false);
   const lastSnapshotRef = useRef<GameState | null>(null);
+  // Stores a one-shot remaining-seconds value to use instead of full turnTimeoutSeconds
+  // on the next timer reset (populated by resync/startGame callbacks).
+  const turnTimeOverrideRef = useRef<number | null>(computeRemaining(initialTurnStartedAt));
 
   useEffect(() => { gameRef.current = game; }, [game]);
   useEffect(() => { connectedPlayersRef.current = connectedPlayers; }, [connectedPlayers]);
@@ -200,7 +212,10 @@ export function useGameEngine({
 
   // ── Turn countdown ──────────────────────────────────────────────────────
   useEffect(() => {
-    setTurnTimeLeft(turnTimeoutSeconds);
+    // If a remaining-time override was queued (e.g., from page resync), use it once.
+    const override = turnTimeOverrideRef.current;
+    turnTimeOverrideRef.current = null;
+    setTurnTimeLeft(override ?? turnTimeoutSeconds);
     turnExpiredRef.current = false;
     turnJustStartedRef.current = true;
     const t = window.setTimeout(() => { turnJustStartedRef.current = false; }, 0);
@@ -513,21 +528,34 @@ export function useGameEngine({
     handleTurnExpiry();
   }, [turnTimeLeft, isMyTurn, game.status, handleTurnExpiry, toast, isPlacementLocked, isBotActionPending, showDrawnPlayOption, isPickingUp]);
 
-  const startGame = useCallback(() => {
+  const startGame = useCallback(async () => {
     if (isStartingGame) return;
     setIsStartingGame(true);
-    const typedEcho = getTypedEcho(echo);
-    router.post(
-      `/board/${room.id}/start-game`,
-      {},
-      {
-        preserveState: true,
-        headers: { 'X-Socket-Id': typedEcho?.socketId() ?? '' },
-        onError: () => setIsStartingGame(false),
-        onFinish: () => setTimeout(() => setIsStartingGame(false), 2500),
-      },
-    );
-  }, [isStartingGame, room.id]);
+    try {
+      await startGameApi(room.id);
+      // Resync so the creator (excluded from the broadcast via X-Socket-Id) gets
+      // the updated game state without requiring a page reload.
+      const data = await resyncStateApi(room.id);
+      startTransition(() => {
+        dispatch({
+          type: 'SERVER_SYNC',
+          payload: {
+            hand: data.hand ?? gameRef.current.hand,
+            handCounts: data.hand_counts ?? gameRef.current.handCounts,
+            deckCount: typeof data.deck_count === 'number' ? data.deck_count : gameRef.current.deckCount,
+            topCard: (data.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
+            status: data.game_status ?? gameRef.current.status,
+            pickupPenalty: typeof data.pickup_penalty === 'number' ? data.pickup_penalty : gameRef.current.pickupPenalty,
+          },
+        });
+        dispatch({ type: 'SET_TURN', turn: data.current_turn ?? null });
+      });
+    } catch (err) {
+      toast.error((err as Error)?.message ?? 'Failed to start game.');
+    } finally {
+      setIsStartingGame(false);
+    }
+  }, [isStartingGame, room.id, toast]);
 
   const leaveGame = useCallback(() => {
     router.delete(`/leaveroom/${room.id}`);
@@ -843,6 +871,16 @@ export function useGameEngine({
       try {
         const data = await resyncStateApi(room.id);
         if (cancelled) return;
+        // Store remaining time before dispatching SET_TURN so the timer effect
+        // can pick it up if the turn value changes (or for the first render).
+        if (data.turn_started_at && data.current_turn != null) {
+          const remaining = computeRemaining(data.turn_started_at);
+          if (remaining !== null) {
+            turnTimeOverrideRef.current = remaining;
+            // Also apply directly in case currentTurn hasn't changed (effect won't re-run).
+            window.setTimeout(() => setTurnTimeLeft(remaining), 0);
+          }
+        }
         dispatch({
           type: 'SERVER_SYNC',
           payload: {

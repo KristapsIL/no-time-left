@@ -89,7 +89,7 @@ class CardGameController extends Controller
         return $playerIds[$nextIndex] ?? null;
     }
 
-    protected function runBotTurns(int $roomId): void
+    public function runBotTurns(int $roomId): void
     {
         for ($i = 0; $i < 50; $i++) {
             $action = DB::transaction(function () use ($roomId) {
@@ -443,6 +443,7 @@ class CardGameController extends Controller
             'myHand'        => array_values($myHand),
             'gameStatus'    => $game->game_status,
             'currentTurn'   => $game->current_turn,
+            'turnStartedAt' => $game->turn_started_at?->toISOString(),
             'winnerId'      => $game->winner,
             'userId'        => $user->id,
             'creatorId'     => $room->created_by,
@@ -652,11 +653,10 @@ class CardGameController extends Controller
 
             $this->runBotTurns($game->room_id);
 
-            // Atgriež veiksmīgu paziņojumu
-            return redirect()->back()->with('success', 'Spēle sākta');
+            // Return JSON so the frontend can update state without a page redirect.
+            return response()->json(['success' => true]);
         } catch (\Exception $e) {
-            // Kļūdas apstrāde ar ziņojumu
-            return redirect()->back()->with('error', $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 422);
         }
     }
 
@@ -1121,13 +1121,14 @@ class CardGameController extends Controller
         $handCounts = collect($hands)->map(fn($h) => count($h))->toArray();
 
         return response()->json([
-            'hand'           => $hands[(string)$userId] ?? [],
-            'hand_counts'    => $handCounts,
-            'deck_count'     => count($game->deck ?? []),
-            'used_cards'     => $usedCards,
-            'current_turn'   => $game->current_turn,
-            'game_status'    => $game->game_status,
-            'pickup_penalty' => (int) ($game->pickup_penalty ?? 0),
+            'hand'             => $hands[(string)$userId] ?? [],
+            'hand_counts'      => $handCounts,
+            'deck_count'       => count($game->deck ?? []),
+            'used_cards'       => $usedCards,
+            'current_turn'     => $game->current_turn,
+            'game_status'      => $game->game_status,
+            'pickup_penalty'   => (int) ($game->pickup_penalty ?? 0),
+            'turn_started_at'  => $game->turn_started_at?->toISOString(),
         ]);
     }
 }

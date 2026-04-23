@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class CardGame extends Model
 {
     protected $fillable = [
-        'room_id', 'game_status', 'player_hands', 'game_started_at','deck', 'used_cards', 'current_turn', 'has_picked_up', 'pickup_penalty', 'winner'
+        'room_id', 'game_status', 'player_hands', 'game_started_at', 'turn_started_at', 'deck', 'used_cards', 'current_turn', 'has_picked_up', 'pickup_penalty', 'winner'
     ];
 
     protected $casts = [
@@ -15,8 +15,21 @@ class CardGame extends Model
         'player_hands' => 'array',
         'used_cards' => 'array',
         'game_started_at' => 'datetime',
+        'turn_started_at' => 'datetime',
         'pickup_penalty' => 'integer',
     ];
+
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        // Automatically record when the turn changes to a new player.
+        static::saving(function (CardGame $game) {
+            if ($game->isDirty('current_turn') && $game->current_turn !== null) {
+                $game->turn_started_at = now();
+            }
+        });
+    }
 
     public function room(){
         return $this->belongsTo(Room::class);

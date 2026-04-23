@@ -4,10 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Room;
 use App\Models\RoomRules;
+use App\Models\User;
+use App\Http\Controllers\CardGameController;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class RoomController extends Controller
 {
@@ -111,11 +114,14 @@ class RoomController extends Controller
      * izmantojot Inertia.js, bez nepieciešamības veidot REST API.
      */
     public function findRoom(){
-        // Iegūstam visas istabas ar noteikumiem, spēli un spēlētājiem
+        // Exclude rooms with finished games and AI-only quick-duel rooms.
         $rooms = Room::with(['rules', 'game', 'players'])
             ->where('room_name', 'not like', 'AI Duel %')
+            ->where(function ($q) {
+                $q->whereDoesntHave('game')
+                  ->orWhereHas('game', fn ($gq) => $gq->where('game_status', '!=', 'finished'));
+            })
             ->get();
-        // Ar Inertia palīdzību nosūtām datus uz React komponenti "FindRoom"
         return Inertia::render('cardgame/FindRoom', ['rooms' => $rooms]);
     }
 
@@ -248,7 +254,77 @@ class RoomController extends Controller
 
     public function leaveRoom(Request $request, $roomId)
     {
-        $request->user()->rooms()->detach($roomId);
+        $userId = (int) $request->user()->id;
+        $runBots = false;
+
+        DB::transaction(function () use ($userId, $roomId, &$runBots) {
+            $room = Room::with(['game', 'players', 'rules'])->lockForUpdate()->findOrFail($roomId);
+            $game = $room->game;
+
+            if ($game && $game->isActive()) {
+                // Replace the leaving player with a bot so the game can continue.
+                $bot = User::query()->forceCreate([
+                    'name'              => 'Bot ' . strtoupper(Str::random(4)),
+                    'role'              => 'bot',
+                    'email'             => 'bot+' . Str::uuid() . '@no-time-left.local',
+                    'email_verified_at' => now(),
+                    'password'          => Hash::make(Str::random(32)),
+                ]);
+
+                $hands = $game->player_hands ?? [];
+                $leavingHand = $hands[(string) $userId] ?? [];
+                unset($hands[(string) $userId]);
+                $hands[(string) $bot->id] = $leavingHand;
+
+                // Transfer the turn to the bot if it was the leaving player's turn.
+                if ((int) $game->current_turn === $userId) {
+                    $game->current_turn = $bot->id;
+                    $runBots = true;
+                }
+
+                $game->player_hands = $hands;
+                $game->save();
+
+                DB::table('room_user')->where('user_id', $userId)->where('room_id', $roomId)->delete();
+                DB::table('room_user')->insert([
+                    'user_id'    => $bot->id,
+                    'room_id'    => $roomId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            } else {
+                // Not an active game — just remove the player.
+                DB::table('room_user')->where('user_id', $userId)->where('room_id', $roomId)->delete();
+            }
+
+            // If no real human players remain after leaving, delete the room and orphaned bots.
+            $remainingBotIds = DB::table('room_user')
+                ->join('users', 'users.id', '=', 'room_user.user_id')
+                ->where('room_user.room_id', $roomId)
+                ->where('users.role', 'bot')
+                ->pluck('users.id')
+                ->toArray();
+
+            $humanCount = DB::table('room_user')
+                ->join('users', 'users.id', '=', 'room_user.user_id')
+                ->where('room_user.room_id', $roomId)
+                ->where('users.role', '!=', 'bot')
+                ->count();
+
+            if ($humanCount === 0) {
+                $runBots = false;
+                $room->delete(); // cascades to card_games and room_user
+                if (!empty($remainingBotIds)) {
+                    User::destroy($remainingBotIds);
+                }
+            }
+        });
+
+        // Trigger bot turns outside the transaction to avoid deadlocks.
+        if ($runBots) {
+            (new CardGameController)->runBotTurns($roomId);
+        }
+
         return redirect()->route('findRoom');
     }
 }
