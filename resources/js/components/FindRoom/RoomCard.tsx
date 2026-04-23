@@ -10,7 +10,7 @@ type Room = {
     rules: string[];
   };
   game?: {
-    game_status: 'waiting' | 'starting' | 'in_progress' | 'finished';
+    game_status: 'waiting' | 'starting' | 'in_progress' | 'paused' | 'finished';
   } | null;
   players?: Array<{ id: number; name: string }> | null;
 };
@@ -21,6 +21,7 @@ export default function RoomCard({ room, currentUserId }: { room: Room; currentU
   const gameStatus = room.game?.game_status;
   const isRoomFull = currentPlayers >= maxPlayers;
   const isGameActive = gameStatus === 'starting' || gameStatus === 'in_progress';
+  const isGamePaused = gameStatus === 'paused';
   const isGameFinished = gameStatus === 'finished';
   const isExistingPlayer = currentUserId && room.players?.some(player => player.id === currentUserId);
   const canJoin = isExistingPlayer || (!isRoomFull && !isGameActive && !isGameFinished);
@@ -78,7 +79,7 @@ export default function RoomCard({ room, currentUserId }: { room: Room; currentU
         }`}
       >
         {canJoin ? 
-          (isExistingPlayer ? 'Rejoin Game' : 'Join Room') : 
+          (isExistingPlayer ? 'Rejoin Game' : isGamePaused ? 'Join & Resume' : 'Join Room') : 
          isGameActive ? 'Game in Progress' :
          isGameFinished ? 'Game Finished' :
          isRoomFull ? 'Room Full' : 'Cannot Join'

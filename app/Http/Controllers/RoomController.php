@@ -10,7 +10,6 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 
 class RoomController extends Controller
 {
@@ -119,7 +118,7 @@ class RoomController extends Controller
             ->where('room_name', 'not like', 'AI Duel %')
             ->where(function ($q) {
                 $q->whereDoesntHave('game')
-                  ->orWhereHas('game', fn ($gq) => $gq->where('game_status', '!=', 'finished'));
+                  ->orWhereHas('game', fn ($gq) => $gq->whereNotIn('game_status', ['finished']));
             })
             ->get();
         return Inertia::render('cardgame/FindRoom', ['rooms' => $rooms]);
@@ -147,71 +146,85 @@ class RoomController extends Controller
 
         if ($isExistingPlayer) {
             return redirect()->route('board', ['roomId' => $roomId])
-                ->with('success', 'Welcome back! You have rejoined the game.');
+                ->with('success', 'Welcome back!');
         }
 
-        // Mid-match join: take over a bot's seat and hand
-        if ($room->isGameActive()) {
-            $botToReplace = $room->players()
-                ->where('users.role', 'bot')
-                ->orderBy('room_user.created_at')
-                ->first();
+        $game = $room->game;
 
-            if (!$botToReplace) {
+        // Paused game: allow a new player to fill the open slot and resume
+        if ($game && $game->isPaused()) {
+            $currentCount = $room->players()->count();
+            $maxPlayers   = $room->rules->max_players ?? 4;
+
+            if ($currentCount >= $maxPlayers) {
                 return redirect()->route('findRoom')
-                    ->with('error', 'Cannot join room: Game is in progress and no bot slots are available.');
+                    ->with('error', 'Cannot join: the room is full.');
             }
 
-            $botId = (int) $botToReplace->id;
-            $newCurrentTurn = null;
-
-            DB::transaction(function () use ($roomId, $userId, $botId, &$newCurrentTurn) {
-                $room = Room::with(['game', 'players'])->lockForUpdate()->findOrFail($roomId);
+            DB::transaction(function () use ($roomId, $userId, $room) {
+                $room = Room::with(['game', 'players' => fn ($q) => $q->orderBy('room_user.created_at'), 'rules'])
+                    ->lockForUpdate()
+                    ->findOrFail($roomId);
                 $game = $room->game;
 
-                // Transfer bot's hand to the new player
+                // Add player to room
+                DB::table('room_user')->insert([
+                    'user_id'    => $userId,
+                    'room_id'    => $roomId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                // Deal them cards from the deck
+                $deck  = $game->deck ?? [];
+                $cardsPerPlayer = $room->rules->cards_per_player ?? 6;
+                $newHand = array_splice($deck, 0, min($cardsPerPlayer, count($deck)));
+
                 $hands = $game->player_hands ?? [];
-                $botHand = $hands[(string) $botId] ?? [];
-                unset($hands[(string) $botId]);
-                $hands[(string) $userId] = $botHand;
+                $hands[(string) $userId] = $newHand;
 
-                // Hand over the turn if the bot was up next
-                $currentTurn = (int) $game->current_turn;
-                if ($currentTurn === $botId) {
-                    $currentTurn = $userId;
-                }
-                $newCurrentTurn = $currentTurn;
-
+                // Resume game
                 $game->player_hands = $hands;
-                $game->current_turn = $currentTurn;
+                $game->deck         = array_values($deck);
+                $game->game_status  = 'in_progress';
                 $game->save();
 
-                // Swap bot → real player in room_user
-                DB::table('room_user')->where('user_id', $botId)->delete();
-                DB::table('room_user')->updateOrInsert(
-                    ['user_id' => $userId],
-                    [
-                        'room_id'    => $roomId,
-                        'updated_at' => now(),
-                        'created_at' => now(),
-                    ]
-                );
+                $handCounts = collect($hands)->map(fn ($h) => count($h))->toArray();
+                $players    = $room->players()->orderBy('room_user.created_at')
+                    ->get()->push(User::find($userId))
+                    ->map(fn ($p) => ['id' => (int) $p->id, 'name' => $p->name, 'role' => $p->role ?? 'player'])
+                    ->values()->toArray();
 
-                // Send the hand to the new player
-                $handCounts = collect($hands)->map(fn($h) => count($h))->toArray();
+                // Send the new player their hand
                 broadcast(new \App\Events\HandSynced(
                     roomId: $roomId,
                     userId: $userId,
-                    hand: $botHand,
+                    hand: $newHand,
                     handCounts: $handCounts,
-                    deckCount: count($game->deck ?? []),
+                    deckCount: count($deck),
                     usedCards: $game->used_cards ?? [],
-                    turnPlayerId: $currentTurn,
+                    turnPlayerId: $game->current_turn,
+                ));
+
+                // Tell everyone the game resumed
+                broadcast(new \App\Events\GameResumed(
+                    roomId: $roomId,
+                    handCounts: $handCounts,
+                    deckCount: count($deck),
+                    usedCards: $game->used_cards ?? [],
+                    currentTurn: $game->current_turn,
+                    players: $players,
                 ));
             });
 
             return redirect()->route('board', ['roomId' => $roomId])
-                ->with('success', 'You joined the ongoing game, taking over a bot\'s hand!');
+                ->with('success', 'Game resumed!');
+        }
+
+        // Active game — no longer allowing mid-match joins
+        if ($game && $game->isActive()) {
+            return redirect()->route('findRoom')
+                ->with('error', 'Cannot join room: game is already in progress.');
         }
 
         // Pre-game join
@@ -219,23 +232,13 @@ class RoomController extends Controller
         $maxPlayers = $room->rules->max_players ?? 4;
 
         if ($currentPlayerCount >= $maxPlayers) {
-            $botToReplace = $room->players()
-                ->where('users.role', 'bot')
-                ->orderBy('room_user.created_at')
-                ->first();
-
-            if ($botToReplace) {
-                $room->players()->detach($botToReplace->id);
-                $room->load('players');
-            } else {
-                return redirect()->route('findRoom')
-                    ->with('error', 'Cannot join room: Room is full.');
-            }
+            return redirect()->route('findRoom')
+                ->with('error', 'Cannot join room: room is full.');
         }
 
-        if ($room->game && $room->game->isFinished()) {
+        if ($game && $game->isFinished()) {
             return redirect()->route('findRoom')
-                ->with('error', 'Cannot join room: Game has finished.');
+                ->with('error', 'Cannot join room: game has finished.');
         }
 
         DB::table('room_user')->updateOrInsert(
@@ -254,57 +257,46 @@ class RoomController extends Controller
 
     public function leaveRoom(Request $request, $roomId)
     {
-        $userId = (int) $request->user()->id;
-        $runBots = false;
+        $userId   = (int) $request->user()->id;
+        $leaverName = $request->user()->name ?? "Player {$userId}";
 
-        DB::transaction(function () use ($userId, $roomId, &$runBots) {
+        DB::transaction(function () use ($userId, $roomId, $leaverName) {
             $room = Room::with(['game', 'players', 'rules'])->lockForUpdate()->findOrFail($roomId);
             $game = $room->game;
 
             if ($game && $game->isActive()) {
-                // Replace the leaving player with a bot so the game can continue.
-                $bot = User::query()->forceCreate([
-                    'name'              => 'Bot ' . strtoupper(Str::random(4)),
-                    'role'              => 'bot',
-                    'email'             => 'bot+' . Str::uuid() . '@no-time-left.local',
-                    'email_verified_at' => now(),
-                    'password'          => Hash::make(Str::random(32)),
-                ]);
-
+                // Remove the leaver's hand
                 $hands = $game->player_hands ?? [];
-                $leavingHand = $hands[(string) $userId] ?? [];
                 unset($hands[(string) $userId]);
-                $hands[(string) $bot->id] = $leavingHand;
+                $game->player_hands = $hands;
 
-                // Transfer the turn to the bot if it was the leaving player's turn.
+                // Advance the turn away from the leaver if it was theirs
                 if ((int) $game->current_turn === $userId) {
-                    $game->current_turn = $bot->id;
-                    $runBots = true;
+                    // Find next human in current rotation (before detach so the list is intact)
+                    $orderedIds = $room->players()
+                        ->orderBy('room_user.created_at')
+                        ->pluck('users.id')
+                        ->filter(fn ($id) => (int) $id !== $userId)
+                        ->values()
+                        ->toArray();
+                    $game->current_turn = $orderedIds[0] ?? null;
                 }
 
-                $game->player_hands = $hands;
+                // Pause the game
+                $game->game_status = 'paused';
                 $game->save();
 
+                // Remove from room
                 DB::table('room_user')->where('user_id', $userId)->where('room_id', $roomId)->delete();
-                DB::table('room_user')->insert([
-                    'user_id'    => $bot->id,
-                    'room_id'    => $roomId,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
+
+                // Notify remaining players
+                broadcast(new \App\Events\GamePaused($roomId, $leaverName));
             } else {
-                // Not an active game — just remove the player.
+                // Waiting / finished — just remove
                 DB::table('room_user')->where('user_id', $userId)->where('room_id', $roomId)->delete();
             }
 
-            // If no real human players remain after leaving, delete the room and orphaned bots.
-            $remainingBotIds = DB::table('room_user')
-                ->join('users', 'users.id', '=', 'room_user.user_id')
-                ->where('room_user.room_id', $roomId)
-                ->where('users.role', 'bot')
-                ->pluck('users.id')
-                ->toArray();
-
+            // If no human players remain, delete the whole room
             $humanCount = DB::table('room_user')
                 ->join('users', 'users.id', '=', 'room_user.user_id')
                 ->where('room_user.room_id', $roomId)
@@ -312,18 +304,9 @@ class RoomController extends Controller
                 ->count();
 
             if ($humanCount === 0) {
-                $runBots = false;
-                $room->delete(); // cascades to card_games and room_user
-                if (!empty($remainingBotIds)) {
-                    User::destroy($remainingBotIds);
-                }
+                $room->delete();
             }
         });
-
-        // Trigger bot turns outside the transaction to avoid deadlocks.
-        if ($runBots) {
-            (new CardGameController)->runBotTurns($roomId);
-        }
 
         return redirect()->route('findRoom');
     }

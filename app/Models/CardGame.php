@@ -42,6 +42,12 @@ class CardGame extends Model
     public function isActive(){
         return in_array($this->game_status, ['starting', 'in_progress']);
     }
+    public function isPaused() {
+        return $this->game_status === 'paused';
+    }
+    public function isPaused() {
+        return $this->game_status === 'paused';
+    }
 
     public function isWaiting() {
         return $this->game_status === 'waiting';

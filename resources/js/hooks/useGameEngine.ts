@@ -24,9 +24,10 @@ export type GameState = {
   topCard: string | null;
   handCounts: Record<string, number>;
   currentTurn: number | null;
-  status: 'waiting' | 'in_progress' | 'finished';
+  status: 'waiting' | 'in_progress' | 'paused' | 'finished';
   winnerId: number | null | undefined;
   pickupPenalty: number;
+  pausedBy?: string | null;
 };
 
 export type FlyingCard = { card: string; from: 'bottom' | 'top' | 'left' | 'right' };
@@ -49,7 +50,7 @@ export type GameEngineInput = {
   initialDeckCount: number;
   initialUsedCards: string[];
   initialHandCounts: Record<string, number>;
-  initialGameStatus: 'waiting' | 'in_progress' | 'finished';
+  initialGameStatus: 'waiting' | 'in_progress' | 'paused' | 'finished';
   initialCurrentTurn: number | null;
   initialTurnStartedAt: string | null;
   initialWinnerId: number | null | undefined;
@@ -857,10 +858,45 @@ export function useGameEngine({
           handCounts: {},
           currentTurn: null,
           pickupPenalty: 0,
+          pausedBy: null,
         },
       });
       // Reload the room prop so bots removed by reset() are cleared from the player list
       router.reload({ only: ['room'] });
+    };
+
+    const onGamePaused = (raw: unknown) => {
+      const d = raw as { leaver_name?: string };
+      dispatch({
+        type: 'SERVER_SYNC',
+        payload: { status: 'paused', pausedBy: d.leaver_name ?? null },
+      });
+    };
+
+    const onGameResumed = (raw: unknown) => {
+      const d = raw as {
+        hand_counts?: Record<string, number>;
+        deck_count?: number;
+        used_cards?: string[];
+        current_turn?: number | null;
+        players?: Array<{ id: number; name?: string; role?: string }>;
+      };
+      if (Array.isArray(d.players) && d.players.length) {
+        const merged = uniqById([...(staticRoomPlayersRef.current ?? []), ...d.players]);
+        staticRoomPlayersRef.current = merged;
+        setConnectedPlayers(merged);
+      }
+      dispatch({
+        type: 'SERVER_SYNC',
+        payload: {
+          status: 'in_progress',
+          pausedBy: null,
+          handCounts: d.hand_counts ?? gameRef.current.handCounts,
+          deckCount: typeof d.deck_count === 'number' ? d.deck_count : gameRef.current.deckCount,
+          topCard: (d.used_cards ?? []).at(-1) ?? gameRef.current.topCard,
+        },
+      });
+      if (typeof d.current_turn === 'number') dispatch({ type: 'SET_TURN', turn: d.current_turn });
     };
 
     channel.listen('.game-started', onGameStarted);
@@ -868,6 +904,8 @@ export function useGameEngine({
     channel.listen('.hand-synced', onHandSynced);
     channel.listen('.game-finished', onGameFinished);
     channel.listen('.game-reset', onGameReset);
+    channel.listen('.game-paused', onGamePaused);
+    channel.listen('.game-resumed', onGameResumed);
 
     return () => {
       try {
@@ -876,6 +914,8 @@ export function useGameEngine({
         channel.stopListening('.hand-synced');
         channel.stopListening('.game-finished');
         channel.stopListening('.game-reset');
+        channel.stopListening('.game-paused');
+        channel.stopListening('.game-resumed');
         typedEcho.leave(`room-${room.id}`);
       } catch { /* ignore */ }
     };

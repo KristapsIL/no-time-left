@@ -37,7 +37,7 @@ type Props = {
   usedCards?: string[];
   handCounts?: Record<string, number>;
   myHand?: string[];
-  gameStatus?: 'waiting' | 'in_progress' | 'finished';
+  gameStatus?: 'waiting' | 'in_progress' | 'paused' | 'finished';
   currentTurn?: number | null;
   turnStartedAt?: string | null;
   winnerId?: number | null;
@@ -255,6 +255,31 @@ export default function Board() {
             roomRules={room.rules}
             onSaved={() => router.reload({ only: ['room'] })}
           />
+        )}
+
+        {/* ── Paused overlay ───────────────────────────────────────────── */}
+        {game.status === 'paused' && (
+          <div className="absolute inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-zinc-950 border border-white/10 rounded-2xl p-8 w-full max-w-sm text-zinc-100 space-y-4 shadow-2xl text-center">
+              <div className="text-5xl">⏸</div>
+              <h2 className="text-2xl font-bold">Game Paused</h2>
+              {game.pausedBy && (
+                <p className="text-zinc-400 text-sm">
+                  <span className="text-white font-medium">{game.pausedBy}</span> left the game.
+                </p>
+              )}
+              <p className="text-zinc-400 text-sm">
+                Waiting for a player to join and resume…
+              </p>
+              <button
+                type="button"
+                onClick={leaveGame}
+                className="w-full py-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-sm transition"
+              >
+                Leave Room
+              </button>
+            </div>
+          </div>
         )}
         {/* ── Row 1: Opponents ────────────────────────────────────────── */}
         {/* Mobile: all opponents as compact arc fans in one strip (turn order) */}

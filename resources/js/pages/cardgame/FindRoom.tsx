@@ -15,7 +15,7 @@ type Room = {
         rules: string[];
     };
     game?: {
-        game_status: 'waiting' | 'starting' | 'in_progress';
+        game_status: 'waiting' | 'starting' | 'in_progress' | 'paused';
     } | null;
     players?: Array<{ id: number; name: string }> | null;
 };
@@ -39,7 +39,7 @@ export default function FindRoom({ rooms, auth }: Props) {
     const [joinCode, setJoinCode] = useState('');
     const [joinError, setJoinError] = useState<string | null>(flashError ?? null);
     const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'public' | 'private'>('all');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'waiting' | 'starting' | 'in_progress'>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'waiting' | 'starting' | 'in_progress' | 'paused'>('all');
     const [maxPlayersFilter, setMaxPlayersFilter] = useState<'all' | '2' | '3' | '4'>('all');
     const [ruleFilter, setRuleFilter] = useState<string>('all');
 
@@ -155,13 +155,14 @@ export default function FindRoom({ rooms, auth }: Props) {
 
                             <select
                                 value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value as 'all' | 'waiting' | 'starting' | 'in_progress')}
+                                onChange={(e) => setStatusFilter(e.target.value as 'all' | 'waiting' | 'starting' | 'in_progress' | 'paused')}
                                 className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-cyan-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                             >
                                 <option value="all">All statuses</option>
                                 <option value="waiting">Waiting</option>
                                 <option value="starting">Starting</option>
                                 <option value="in_progress">In progress</option>
+                                <option value="paused">Paused</option>
                             </select>
 
                             <select
