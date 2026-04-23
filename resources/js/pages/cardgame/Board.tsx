@@ -361,6 +361,7 @@ export default function Board() {
                 className="absolute z-50 pointer-events-none"
                 style={{
                   left: '50%',
+                  transform: 'translateX(-50%)',
                   marginLeft: 0,
                   bottom: 'calc(100% + 8px)',
                   width: 110,

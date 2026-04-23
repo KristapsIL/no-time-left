@@ -979,9 +979,11 @@ class CardGameController extends Controller
                     $game->player_hands = $hands;
                     $game->deck         = array_values($deck);
 
-                    $canPlayAfterPickup = $topCard
-                        ? collect($playerHand)->contains(fn ($c) => $this->isValidPlay((string) $c, (string) $topCard))
-                        : !empty($playerHand);
+                    // Only the drawn card may be played after a normal pickup,
+                    // not any pre-existing card in hand.
+                    $canPlayAfterPickup = isset($drawnCard)
+                        ? ($topCard ? $this->isValidPlay((string) $drawnCard, (string) $topCard) : true)
+                        : false;
 
                     if ($canPlayAfterPickup) {
                         $game->has_picked_up = true;
