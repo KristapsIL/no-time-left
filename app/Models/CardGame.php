@@ -45,9 +45,6 @@ class CardGame extends Model
     public function isPaused() {
         return $this->game_status === 'paused';
     }
-    public function isPaused() {
-        return $this->game_status === 'paused';
-    }
 
     public function isWaiting() {
         return $this->game_status === 'waiting';
