@@ -1129,6 +1129,11 @@ class CardGameController extends Controller
             'game_status'      => $game->game_status,
             'pickup_penalty'   => (int) ($game->pickup_penalty ?? 0),
             'turn_started_at'  => $game->turn_started_at?->toISOString(),
+            'players'          => $room->players->map(fn ($p) => [
+                'id'   => (int) $p->id,
+                'name' => $p->name,
+                'role' => $p->role ?? 'player',
+            ])->values()->toArray(),
         ]);
     }
 }

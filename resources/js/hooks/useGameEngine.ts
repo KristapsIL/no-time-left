@@ -536,6 +536,12 @@ export function useGameEngine({
       // Resync so the creator (excluded from the broadcast via X-Socket-Id) gets
       // the updated game state without requiring a page reload.
       const data = await resyncStateApi(room.id);
+      // Update the player list (bots may have been added during startGame)
+      if (Array.isArray(data.players) && data.players.length) {
+        const merged = uniqById([...(staticRoomPlayersRef.current ?? []), ...data.players]);
+        staticRoomPlayersRef.current = merged;
+        setConnectedPlayers(merged);
+      }
       startTransition(() => {
         dispatch({
           type: 'SERVER_SYNC',
@@ -880,6 +886,12 @@ export function useGameEngine({
             // Also apply directly in case currentTurn hasn't changed (effect won't re-run).
             window.setTimeout(() => setTurnTimeLeft(remaining), 0);
           }
+        }
+        // Update player list on mount (handles bots added after the page was first loaded)
+        if (Array.isArray(data.players) && data.players.length) {
+          const merged = uniqById([...(staticRoomPlayersRef.current ?? []), ...data.players]);
+          staticRoomPlayersRef.current = merged;
+          setConnectedPlayers(merged);
         }
         dispatch({
           type: 'SERVER_SYNC',
