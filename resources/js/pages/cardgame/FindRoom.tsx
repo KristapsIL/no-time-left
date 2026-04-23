@@ -2,7 +2,7 @@
 import AppLayout from '@/layouts/app-layout';
 import { Head, router, usePage } from "@inertiajs/react";
 import RoomCard from '@/components/FindRoom/RoomCard';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 
 type Room = {
@@ -42,6 +42,14 @@ export default function FindRoom({ rooms, auth }: Props) {
     const [statusFilter, setStatusFilter] = useState<'all' | 'waiting' | 'starting' | 'in_progress'>('all');
     const [maxPlayersFilter, setMaxPlayersFilter] = useState<'all' | '2' | '3' | '4'>('all');
     const [ruleFilter, setRuleFilter] = useState<string>('all');
+
+    // Auto-refresh the room list every 8 seconds so newly created rooms appear
+    useEffect(() => {
+        const id = window.setInterval(() => {
+            router.reload({ only: ['rooms'] });
+        }, 8000);
+        return () => window.clearInterval(id);
+    }, []);
 
     const availableRules = useMemo(() => {
         const rules = new Set<string>();
@@ -183,19 +191,28 @@ export default function FindRoom({ rooms, auth }: Props) {
 
                         <div className="mt-3 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
                             <p>{filteredRooms.length} room{filteredRooms.length === 1 ? '' : 's'} match your filters</p>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setQuery('');
-                                    setVisibilityFilter('all');
-                                    setStatusFilter('all');
-                                    setMaxPlayersFilter('all');
-                                    setRuleFilter('all');
-                                }}
-                                className="rounded-md border border-zinc-300 px-2 py-1 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                            >
-                                Clear filters
-                            </button>
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => router.reload({ only: ['rooms'] })}
+                                    className="rounded-md border border-zinc-300 px-2 py-1 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                >
+                                    ↻ Refresh
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setQuery('');
+                                        setVisibilityFilter('all');
+                                        setStatusFilter('all');
+                                        setMaxPlayersFilter('all');
+                                        setRuleFilter('all');
+                                    }}
+                                    className="rounded-md border border-zinc-300 px-2 py-1 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                >
+                                    Clear filters
+                                </button>
+                            </div>
                         </div>
                     </div>
 
