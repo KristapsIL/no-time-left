@@ -754,8 +754,18 @@ export function useGameEngine({
             : typeof d.deckCount === 'number' ? d.deckCount : undefined;
           const patch: Partial<GameState> = { handCounts: newHC };
           if (typeof dc === 'number') patch.deckCount = dc;
+          if (typeof d.pickup_penalty === 'number') patch.pickupPenalty = d.pickup_penalty;
           dispatch({ type: 'SERVER_SYNC', payload: patch });
         }
+        // Always sync the current turn when another player picks up.
+        // Without this, the next player's client never knows it's their turn.
+        const peerTurn =
+          typeof d.turn_player_id === 'number'
+            ? d.turn_player_id
+            : typeof d.turnPlayerId === 'number'
+              ? d.turnPlayerId
+              : null;
+        if (peerTurn !== null) dispatch({ type: 'SET_TURN', turn: peerTurn });
         return;
       }
 
@@ -849,6 +859,8 @@ export function useGameEngine({
           pickupPenalty: 0,
         },
       });
+      // Reload the room prop so bots removed by reset() are cleared from the player list
+      router.reload({ only: ['room'] });
     };
 
     channel.listen('.game-started', onGameStarted);

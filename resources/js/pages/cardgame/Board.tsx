@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { Head, usePage } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import RoomChat from '@/components/RoomChat';
 import { PlayerHand } from '@/components/Board/PlayerHand';
@@ -253,6 +253,7 @@ export default function Board() {
             toggleChat={() => setIsChatOpen((o) => !o)}
             roomId={room.id}
             roomRules={room.rules}
+            onSaved={() => router.reload({ only: ['room'] })}
           />
         )}
         {/* ── Row 1: Opponents ────────────────────────────────────────── */}

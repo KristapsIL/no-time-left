@@ -408,7 +408,7 @@ class CardGameController extends Controller
         [$room, $game] = DB::transaction(function () use ($roomId) {
             $room = Room::query()
                 ->whereKey($roomId)
-                ->with(['players', 'rules']) 
+                ->with(['players' => fn($q) => $q->orderBy('room_user.created_at'), 'rules'])
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -473,6 +473,13 @@ class CardGameController extends Controller
             $game->game_status   = 'waiting';
             $game->pickup_penalty = 0;
             $game->save();
+
+            // Remove bots so they don't persist into the next game
+            $botIds = $room->players()->where('users.role', 'bot')->pluck('users.id');
+            if ($botIds->isNotEmpty()) {
+                $room->players()->detach($botIds->all());
+                User::whereIn('id', $botIds)->delete();
+            }
 
             broadcast(new \App\Events\GameReset($roomId));
         });
@@ -1107,7 +1114,7 @@ class CardGameController extends Controller
     {
         $userId = $request->user()->id;
 
-        $room = Room::with(['players', 'game'])->findOrFail($roomId);
+        $room = Room::with(['players' => fn($q) => $q->orderBy('room_user.created_at'), 'game'])->findOrFail($roomId);
         $game = $room->game;
 
         $this->ensureRoomMembership($room, $userId);

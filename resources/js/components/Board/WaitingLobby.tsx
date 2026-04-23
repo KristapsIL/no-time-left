@@ -23,6 +23,7 @@ type Props = {
   toggleChat: () => void;
   roomId: number;
   roomRules: RoomRulesShape;
+  onSaved?: () => void;
 };
 
 const Toggle = ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
@@ -55,6 +56,7 @@ export const WaitingLobby: React.FC<Props> = ({
   toggleChat,
   roomId,
   roomRules,
+  onSaved,
 }) => {
   const humanPlayers = players.filter((p) => p.role !== 'bot');
 
@@ -78,6 +80,7 @@ export const WaitingLobby: React.FC<Props> = ({
         rules,
       });
       setShowSettings(false);
+      onSaved?.();
     } finally {
       setSaving(false);
     }
