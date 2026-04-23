@@ -5,6 +5,12 @@ import { getTypedEcho } from '@/types/echo';
 const getCsrf = () =>
   document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
 
+const getSocketHeaders = (): Record<string, string> => {
+  const typedEcho = getTypedEcho(echo);
+  const socketId = typedEcho?.socketId() ?? null;
+  return socketId ? { 'X-Socket-Id': socketId } : {};
+};
+
 async function parseJsonSafe(res: Response): Promise<any | null> {
   // 204 No Content or explicit empty body → null
   if (res.status === 204) return null;
@@ -34,7 +40,6 @@ function buildError(res: Response, body: any): Error {
 }
 
 export const playCardApi = async (roomId: number, card: string) => {
-  const typedEcho = getTypedEcho(echo);
   const res = await fetch(`/board/${roomId}/play-card`, {
     method: 'POST',
     credentials: 'include',
@@ -43,7 +48,7 @@ export const playCardApi = async (roomId: number, card: string) => {
       'Content-Type': 'application/json',
       'X-Requested-With': 'XMLHttpRequest',
       'X-CSRF-TOKEN': getCsrf(),
-      'X-Socket-Id': typedEcho?.socketId() ?? '',
+      ...getSocketHeaders(),
     },
     body: JSON.stringify({ card }),
   });
@@ -54,7 +59,6 @@ export const playCardApi = async (roomId: number, card: string) => {
 };
 
 export const pickupCardApi = async (roomId: number) => {
-  const typedEcho = getTypedEcho(echo);
   const res = await fetch(`/board/${roomId}/pickup`, {
     method: 'POST',
     credentials: 'include',
@@ -63,7 +67,7 @@ export const pickupCardApi = async (roomId: number) => {
       'Content-Type': 'application/json',
       'X-Requested-With': 'XMLHttpRequest',
       'X-CSRF-TOKEN': getCsrf(),
-      'X-Socket-Id': typedEcho?.socketId() ?? '',
+      ...getSocketHeaders(),
     },
   });
 
@@ -73,7 +77,6 @@ export const pickupCardApi = async (roomId: number) => {
 };
 
 export const passTurnApi = async (roomId: number) => {
-  const typedEcho = getTypedEcho(echo);
   const res = await fetch(`/board/${roomId}/pass-turn`, {
     method: 'POST',
     credentials: 'include',
@@ -82,7 +85,7 @@ export const passTurnApi = async (roomId: number) => {
       'Content-Type': 'application/json',
       'X-Requested-With': 'XMLHttpRequest',
       'X-CSRF-TOKEN': getCsrf(),
-      'X-Socket-Id': typedEcho?.socketId() ?? '',
+      ...getSocketHeaders(),
     },
   });
 
@@ -92,7 +95,6 @@ export const passTurnApi = async (roomId: number) => {
 };
 
 export const resyncStateApi = async (roomId: number) => {
-  const typedEcho = getTypedEcho(echo);
   const res = await fetch(`/board/${roomId}/resync-state`, {
     method: 'GET',
     credentials: 'include',
@@ -100,7 +102,7 @@ export const resyncStateApi = async (roomId: number) => {
       'Accept': 'application/json',
       'X-Requested-With': 'XMLHttpRequest',
       'X-CSRF-TOKEN': getCsrf(),
-      'X-Socket-Id': typedEcho?.socketId() ?? '',
+      ...getSocketHeaders(),
     },
     cache: 'no-store',
   });
@@ -111,7 +113,6 @@ export const resyncStateApi = async (roomId: number) => {
 };
 
 export const resetGameApi = async (roomId: number) => {
-  const typedEcho = getTypedEcho(echo);
   const res = await fetch(`/board/${roomId}/reset`, {
     method: 'POST',
     credentials: 'include',
@@ -119,7 +120,7 @@ export const resetGameApi = async (roomId: number) => {
       'Accept': 'application/json',
       'X-Requested-With': 'XMLHttpRequest',
       'X-CSRF-TOKEN': getCsrf(),
-      'X-Socket-Id': typedEcho?.socketId() ?? '',
+      ...getSocketHeaders(),
     },
   });
 
@@ -129,7 +130,6 @@ export const resetGameApi = async (roomId: number) => {
 };
 
 export const startGameApi = async (roomId: number) => {
-  const typedEcho = getTypedEcho(echo);
   const res = await fetch(`/board/${roomId}/start-game`, {
     method: 'POST',
     credentials: 'include',
@@ -138,7 +138,7 @@ export const startGameApi = async (roomId: number) => {
       'Content-Type': 'application/json',
       'X-Requested-With': 'XMLHttpRequest',
       'X-CSRF-TOKEN': getCsrf(),
-      'X-Socket-Id': typedEcho?.socketId() ?? '',
+      ...getSocketHeaders(),
     },
   });
 
