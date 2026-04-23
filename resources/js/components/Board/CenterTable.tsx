@@ -16,16 +16,6 @@ function startTransform(from: FlyingCard['from']): string {
   }
 }
 
-// Keyframe final-state for pickup anim going toward each direction
-function pickupEndTransform(direction: FlyingCard['from']): string {
-  switch (direction) {
-    case 'bottom': return 'translate(-50%, 280%) scale(0.7)';
-    case 'top':    return 'translate(-50%, -280%) scale(0.7)';
-    case 'left':   return 'translate(-360%, -50%) scale(0.7)';
-    case 'right':  return 'translate(280%, -50%) scale(0.7)';
-  }
-}
-
 type Props = {
   topCard: string | null;
   isPlacementLocked: boolean;

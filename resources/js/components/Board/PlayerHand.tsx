@@ -168,7 +168,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
         }
         return best;
       },
-      [mobilePositions]
+      [mobilePositions, mobileRef]
     );
 
     const onMobilePointerDown = useCallback(
