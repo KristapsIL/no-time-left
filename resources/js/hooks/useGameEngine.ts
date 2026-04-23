@@ -346,7 +346,7 @@ export function useGameEngine({
       const visibleAdded = decisionCard ? removeOneCard(added, decisionCard) : added;
 
       // Use server-reported count for animation
-      const animCount = Math.min(Math.max(data.drawn_count ?? penaltyCount, 1), 7);
+      const animCount = Math.min(Math.max(data.drawn_count ?? penaltyCount, 1), 52);
       setPickingUpCount(animCount);
 
       startTransition(() => {

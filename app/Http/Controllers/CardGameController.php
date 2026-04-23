@@ -932,8 +932,9 @@ class CardGameController extends Controller
 
                 if ($pickUpTillMatch) {
                     // ── Draw cards one at a time until a playable card is found ──────
-                    $limit = 7; // hard cap — standard card game convention
-                    while ($drawnCount < $limit) {
+                    while (true) {
+                        $this->checkDeckAndReshuffle($deck, $game);
+                        if (count($deck) === 0) break;
                         $this->checkDeckAndReshuffle($deck, $game);
                         if (count($deck) === 0) break;
 
