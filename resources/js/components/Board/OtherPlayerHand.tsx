@@ -29,6 +29,7 @@ function useElementSize<T extends HTMLElement>() {
   return [ref, sz] as const;
 }
 
+// Pretinieka kārts (kā kartīšu mugurpuses) — skaita tiek rādīta, nevis saturs
 export const OtherPlayerHand: React.FC<Props> = ({
   handCount,
   isTurn, // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -52,7 +53,7 @@ export const OtherPlayerHand: React.FC<Props> = ({
     stepX = n > 1 ? clamp(stepX, minSliver, maxStep) : 0;
 
     const contentWidth = n > 0 ? effW + stepX * (n - 1) : 0;
-    // Only allow scrolling when explicitly allowed
+    // Scrolļot tikai ja tas ir iestāts
     const needsScroll = allowScroll && contentWidth > usableW + 0.5;
 
     let positions: number[] = [];
@@ -64,7 +65,7 @@ export const OtherPlayerHand: React.FC<Props> = ({
         startCenter = effW / 2;
         positions = Array.from({ length: n }, (_, i) => startCenter + i * stepX);
       } else {
-        // Center the fan; excess will be clipped by parent if it overflows
+        // Centrojām fanu; pārpilde tiek apgriezta
         startCenter = -totalSpan / 2;
         positions = Array.from({ length: n }, (_, i) => startCenter + i * stepX);
       }

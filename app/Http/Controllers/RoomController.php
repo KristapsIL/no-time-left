@@ -13,10 +13,12 @@ use Illuminate\Support\Facades\DB;
 
 class RoomController extends Controller
 {
+    // Atgriež istabas izveides lapu
     public function createRoom(){
         return Inertia::render('cardgame/CreateRoom');
     }
 
+    // Apstrādā formu un izveido jaunu istabu ar noteikumiem
     public function store(Request $request)
     {
         //Validē ievadītos datus no formas
@@ -36,13 +38,13 @@ class RoomController extends Controller
         $botDifficulty = $validated['bot_difficulty'] ?? 'medium';
          //Veic visu datubāzes darbību vienā transakcijā, lai kļūdas gadījumā nekas netiktu saglabāts daļēji
         return DB::transaction(function () use ($request, $validated, $botFillCount, $botDifficulty) {
-            //Izveido jaunu istabu ar unikālu kodu un lietotāju, kas to izveidoja
+            // Izveido istabu ar unikālu kodu
             $room = Room::create([
                 'room_name' => $validated['room_name'],
                 'room_code' => $this->uniqueCode(),
                 'created_by'=> $request->user()->id,
             ]);
-             //Izveido šai istabai atbilstošus noteikumus
+             // Izveido noteikumus šai istabai
             RoomRules::create([
                 'room_id'             => $room->id,
                 'public'              => $validated['public'],
@@ -53,6 +55,7 @@ class RoomController extends Controller
                 'rules'               => $validated['rules'] ?? [],
             ]);
 
+            // Pievienojas istabai kā pirmais spēlētājs
             DB::table('room_user')->updateOrInsert(
                 ['user_id' => $request->user()->id],
                 [
@@ -62,11 +65,11 @@ class RoomController extends Controller
                 ]
             );
 
-            //Pēc veiksmīgas izveides pāradresē lietotāju uz spēles galda lapu
             return redirect()->route('board', ['roomId' => $room->id]);
         });
     }
 
+    // Ātri izveido 1v1 istabu pret botu — nekonfigurējams, aiziet uzreiz
     public function quickAiRoom(Request $request)
     {
         return DB::transaction(function () use ($request) {
@@ -100,6 +103,7 @@ class RoomController extends Controller
     }
 
 
+    // Ģenerē unikālu 6 zimķu istabas kodu
     private function uniqueCode(): string
     {
         do {
@@ -108,12 +112,9 @@ class RoomController extends Controller
 
         return $code;
     }
-    /**
-     * Metode, kas atrod visas spēļu istabas un nodod tās React komponentēm,
-     * izmantojot Inertia.js, bez nepieciešamības veidot REST API.
-     */
+    // Atrod publiskās istabas un nodod tās FindRoom lapai
     public function findRoom(){
-        // Exclude rooms with finished games and AI-only quick-duel rooms.
+        // Nerrādam beigtās spēles un AI Duel istabas
         $rooms = Room::with(['rules', 'game', 'players'])
             ->where('room_name', 'not like', 'AI Duel %')
             ->where(function ($q) {
@@ -124,6 +125,7 @@ class RoomController extends Controller
         return Inertia::render('cardgame/FindRoom', ['rooms' => $rooms]);
     }
 
+    // Pievienojas istabai pēc koda — nostrādā ar joinRoom
     public function joinRoomByCode(Request $request, string $code)
     {
         $code = strtoupper(trim($code));
@@ -137,6 +139,7 @@ class RoomController extends Controller
         return $this->joinRoom($request, $room->id);
     }
 
+    // Pievieno spēlētāju istabai — atbalsta re-join, pauziēto spēli un priekgājienu
     public function joinRoom(Request $request, int $roomId)
     {
         $userId = $request->user()->id;
@@ -255,6 +258,7 @@ class RoomController extends Controller
     }
 
 
+    // Spēlētājs atstāj istabu — aptur spēli ja tā rit, vai dzēš istabu ja nav citu
     public function leaveRoom(Request $request, $roomId)
     {
         $userId   = (int) $request->user()->id;

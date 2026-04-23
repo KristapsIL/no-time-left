@@ -10,6 +10,7 @@ type Props = {
   isBotActionPending: boolean;
 };
 
+// Parāda kura spēlētāja kārta ir un cik laika palicis
 export const TurnInfo: React.FC<Props> = ({
   currentTurn,
   currentTurnName,

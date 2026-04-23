@@ -44,6 +44,7 @@ const Toggle = ({ checked, onChange }: { checked: boolean; onChange: () => void 
   </button>
 );
 
+// Gaidīšanas ekrāns pirms spēles — rāda spēlētājus, kodu un ļauj mainīt iestatījumus
 export const WaitingLobby: React.FC<Props> = ({
   players,
   userId,

@@ -23,7 +23,7 @@ class CardGame extends Model
     {
         parent::boot();
 
-        // Automatically record when the turn changes to a new player.
+        // Kad mainās current_turn, automātiski saglabā gājiena sākuma laiku
         static::saving(function (CardGame $game) {
             if ($game->isDirty('current_turn') && $game->current_turn !== null) {
                 $game->turn_started_at = now();
@@ -31,25 +31,31 @@ class CardGame extends Model
         });
     }
 
+    // Saite uz istabu, kurai šī spēle pieder
     public function room(){
         return $this->belongsTo(Room::class);
     }
 
+    // Spēlētājs, kura kārta pašlaik ir gaitā
     public function currentPlayer(){
         return $this->belongsTo(User::class, 'current_turn');
     }
 
+    // Vai spēle aktivīgi rit (starting vai in_progress)
     public function isActive(){
         return in_array($this->game_status, ['starting', 'in_progress']);
     }
+    // Vai spēle ir apturēta (kāds spēlētājs atstāja)
     public function isPaused() {
         return $this->game_status === 'paused';
     }
 
+    // Vai spēle vēl nav sākta
     public function isWaiting() {
         return $this->game_status === 'waiting';
     }
 
+    // Vai spēle jau ir beigusies
     public function isFinished() {
         return $this->game_status === 'finished';
     }

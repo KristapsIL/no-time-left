@@ -1,16 +1,20 @@
-// utils/api.ts
 import echo from '@/lib/echo';
 import { getTypedEcho } from '@/types/echo';
 
+// Palīgfunkcijas HTTP pieprasījumiem
+
+// CSRF token no meta taga
 const getCsrf = () =>
   document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
 
+// X-Socket-Id header tikai ja Echo ir pieslēgts — Pusher met 422 ja sūtām tukšu stringu
 const getSocketHeaders = (): Record<string, string> => {
   const typedEcho = getTypedEcho(echo);
   const socketId = typedEcho?.socketId() ?? null;
   return socketId ? { 'X-Socket-Id': socketId } : {};
 };
 
+// Droši nolasa JSON no atbildes — ignorē tukšu body un 204
 async function parseJsonSafe(res: Response): Promise<any | null> {
   // 204 No Content or explicit empty body → null
   if (res.status === 204) return null;
@@ -28,6 +32,7 @@ async function parseJsonSafe(res: Response): Promise<any | null> {
   }
 }
 
+// Pārveido servera kļūdu par JS Error objektu ar status kodu
 function buildError(res: Response, body: any): Error {
   const msg =
     (body && (body.message || body.error || body.errors)) ||
@@ -39,6 +44,7 @@ function buildError(res: Response, body: any): Error {
   return err;
 }
 
+// Spēlētājs liek kārti uz galda
 export const playCardApi = async (roomId: number, card: string) => {
   const res = await fetch(`/board/${roomId}/play-card`, {
     method: 'POST',
@@ -58,6 +64,7 @@ export const playCardApi = async (roomId: number, card: string) => {
   return body ?? {};
 };
 
+// Spēlētājs paņem kārti(s) no kavas
 export const pickupCardApi = async (roomId: number) => {
   const res = await fetch(`/board/${roomId}/pickup`, {
     method: 'POST',
@@ -76,6 +83,7 @@ export const pickupCardApi = async (roomId: number) => {
   return body ?? {};
 };
 
+// Spēlētājs pielaiž gājienu
 export const passTurnApi = async (roomId: number) => {
   const res = await fetch(`/board/${roomId}/pass-turn`, {
     method: 'POST',
@@ -94,6 +102,7 @@ export const passTurnApi = async (roomId: number) => {
   return body ?? {};
 };
 
+// Ielādē pilnu spēles stāvokli no servera — izmanto pēc lapas pārlādes
 export const resyncStateApi = async (roomId: number) => {
   const res = await fetch(`/board/${roomId}/resync-state`, {
     method: 'GET',
@@ -112,6 +121,7 @@ export const resyncStateApi = async (roomId: number) => {
   return body ?? {};
 };
 
+// Atiestata spēli uz sākumu
 export const resetGameApi = async (roomId: number) => {
   const res = await fetch(`/board/${roomId}/reset`, {
     method: 'POST',
@@ -129,6 +139,7 @@ export const resetGameApi = async (roomId: number) => {
   return body ?? {};
 };
 
+// Sāk spēli — tikai istabas radītājs var izsaukt
 export const startGameApi = async (roomId: number) => {
   const res = await fetch(`/board/${roomId}/start-game`, {
     method: 'POST',
@@ -147,6 +158,7 @@ export const startGameApi = async (roomId: number) => {
   return body ?? {};
 };
 
+// Saglabā istabas iestatījumus (spēlētāju limits, taimauts, botu skaits, noteikumi)
 export const updateRoomSettingsApi = async (
   roomId: number,
   settings: {

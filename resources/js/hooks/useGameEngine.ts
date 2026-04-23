@@ -58,7 +58,8 @@ export type GameEngineInput = {
   toast: { error: (msg: string) => void };
 };
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// Palīgfunkcijas
+// gameReducer — atjaunina spēles stāvokli pēc dispatch
 function gameReducer(state: GameState, action: Action): GameState {
   switch (action.type) {
     case 'SERVER_SYNC':
@@ -88,7 +89,7 @@ const removeOneCard = (cards: string[], card: string): string[] => {
   return [...cards.slice(0, idx), ...cards.slice(idx + 1)];
 };
 
-// ── Main hook ────────────────────────────────────────────────────────────────
+// Galvenais hooks — visa spēles loģika ir šeit
 export function useGameEngine({
   room,
   userId,
@@ -108,7 +109,7 @@ export function useGameEngine({
   const stackingActive  = Array.isArray(room.rules.rules) && room.rules.rules.includes('stacking');
   const plusTwoActive   = Array.isArray(room.rules.rules) && room.rules.rules.includes('plus_two');
 
-  // Compute remaining turn time from server-reported turn start.
+  // Aprēķina cik laika palicis no gājiena sākuma (ko uzreiz atgriež serveris)
   const computeRemaining = (turnStartedAt: string | null) => {
     if (!turnStartedAt) return null;
     const elapsed = Math.floor((Date.now() - new Date(turnStartedAt).getTime()) / 1000);
@@ -127,7 +128,7 @@ export function useGameEngine({
     pickupPenalty: initialPickupPenalty,
   });
 
-  // ── UI / animation state ────────────────────────────────────────────────
+  // Animāciju un UI stāvoklis
   const [turnTimeLeft, setTurnTimeLeft] = useState(() => computeRemaining(initialTurnStartedAt) ?? turnTimeoutSeconds);
   const [placingCard, setPlacingCard] = useState<string | null>(null);
   const [isPlacementLocked, setIsPlacementLocked] = useState(false);
@@ -144,7 +145,7 @@ export function useGameEngine({
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
 
-  // ── Refs ────────────────────────────────────────────────────────────────
+  // Refs — vērtības kas jāpiekļūst no callbacks bez re-render
   const gameRef = useRef(game);
   const turnExpiredRef = useRef(false);
   const turnJustStartedRef = useRef(false);
@@ -158,8 +159,7 @@ export function useGameEngine({
   const pickupAnimEndRef = useRef(0);
   const suppressDecisionRef = useRef(false);
   const lastSnapshotRef = useRef<GameState | null>(null);
-  // Stores a one-shot remaining-seconds value to use instead of full turnTimeoutSeconds
-  // on the next timer reset (populated by resync/startGame callbacks).
+  // Ļauj override taimeri pēc resync — izmantots vienreiz, tad notīrīts
   const turnTimeOverrideRef = useRef<number | null>(computeRemaining(initialTurnStartedAt));
 
   useEffect(() => { gameRef.current = game; }, [game]);
@@ -170,7 +170,7 @@ export function useGameEngine({
     setConnectedPlayers(room.players ?? []);
   }, [room.players]);
 
-  // ── Placement animation ─────────────────────────────────────────────────
+  // Kārts likšanas animācija uz galda
   const clearPlacementTimeout = useCallback(() => {
     if (placementTimeoutRef.current !== null) {
       window.clearTimeout(placementTimeoutRef.current);
@@ -199,7 +199,7 @@ export function useGameEngine({
     [clearPlacementTimeout],
   );
 
-  // Cleanup on unmount
+  // Notīra timeouts kad komponents tiek noņemts
   useEffect(
     () => () => {
       clearPlacementTimeout();
@@ -211,9 +211,9 @@ export function useGameEngine({
     [clearPlacementTimeout],
   );
 
-  // ── Turn countdown ──────────────────────────────────────────────────────
+  // Atpakaļskaitīšana gājienam — restartē katru reizi kad mainās kārta
   useEffect(() => {
-    // If a remaining-time override was queued (e.g., from page resync), use it once.
+    // Ja ir override no resync, izmantojam to vienreiz, citādi sākam no sākuma
     const override = turnTimeOverrideRef.current;
     turnTimeOverrideRef.current = null;
     setTurnTimeLeft(override ?? turnTimeoutSeconds);
@@ -236,7 +236,7 @@ export function useGameEngine({
     return () => window.clearInterval(timer);
   }, [game.currentTurn, game.status, isPlacementLocked, isBotActionPending, showDrawnPlayOption, isPickingUp]);
 
-  // ── Draw-decision countdown ─────────────────────────────────────────────
+  // Atpakaļskaitīšana pacelšanas lēmumam — cik ilgi var izlemt likt vai nolikt
   useEffect(() => {
     if (!showDrawnPlayOption) return;
       setDrawDecisionTimeLeft(5);
@@ -300,7 +300,7 @@ export function useGameEngine({
     });
   }, [drawnCards, uid]);
 
-  // ── Actions ─────────────────────────────────────────────────────────────
+  // Darbības — spēlētāja iespējamie gājieni
   const passTurn = useCallback(async () => {
     try {
       const d = await passTurnApi(room.id);
@@ -493,7 +493,7 @@ export function useGameEngine({
     pickupCard();
   }, [isMyTurn, pickupCard, turnTimeLeft, isPlacementLocked, isBotActionPending, showDrawnPlayOption]);
 
-  // ── Auto-pickup: when a +2 penalty is pending and the player can't stack ──
+  // Auto-pacelšana ja ir +2 sods un spēlētājs nevar likt 2 virsū
   const autoPickedUpRef = useRef(false);
   useEffect(() => {
     if (!isMyTurn || !plusTwoActive || game.pickupPenalty <= 0) {
@@ -503,7 +503,7 @@ export function useGameEngine({
     if (isPlacementLocked || isBotActionPending || pickingUpRef.current) return;
     if (autoPickedUpRef.current) return;
 
-    // Player can stack if stacking is on AND they have a 2 in hand
+    // Spēlētājs var "stackot" tikai ja ir stacking noteikums UN ir 2 rokā
     const canStack =
       stackingActive && game.hand.some((c) => c.startsWith('2-'));
 
@@ -515,7 +515,7 @@ export function useGameEngine({
 
   const handleTurnExpiry = useCallback(async () => {
     try {
-      // Pass suppressDecision=true so pickupCard auto-passes instead of showing the play option
+      // suppressDecision=true lai automātiski pielaiž gājienu, nevis rāda izvēlni
       await pickupCard(true);
     } catch { /* ignore */ }
   }, [pickupCard]);
@@ -534,10 +534,9 @@ export function useGameEngine({
     setIsStartingGame(true);
     try {
       await startGameApi(room.id);
-      // Resync so the creator (excluded from the broadcast via X-Socket-Id) gets
-      // the updated game state without requiring a page reload.
+      // Radītājs tiek izslēgts no broadcast (X-Socket-Id), tāpēc resync manuāli
       const data = await resyncStateApi(room.id);
-      // Update the player list (bots may have been added during startGame)
+      // Ja tika pievienoti boti, ielādē atjaunināto spēlētāju sarakstu
       if (Array.isArray(data.players) && data.players.length) {
         const merged = uniqById([...(staticRoomPlayersRef.current ?? []), ...data.players]);
         staticRoomPlayersRef.current = merged;
@@ -573,7 +572,7 @@ export function useGameEngine({
     catch { /* game-reset event handles state */ }
   }, [room.id]);
 
-  // ── Echo subscription ───────────────────────────────────────────────────
+  // Reāllaika notikumi caur Echo/Pusher — klausās uz istabas kanāla
   useEffect(() => {
     const typedEcho = getTypedEcho(echo);
     if (!typedEcho) return;
@@ -599,7 +598,7 @@ export function useGameEngine({
       });
     });
 
-    // Event handlers defined inside effect to safely capture stable refs/callbacks
+    // Notikumu apstrādātāji — šeit definēti lai var izmantot refs
     const onGameStarted = (raw: unknown) => {
       const data = raw as {
         hand_counts?: Record<string, number>;
@@ -660,7 +659,7 @@ export function useGameEngine({
         actorId !== null &&
         connectedPlayersRef.current.some((p) => p.id === actorId && p.role === 'bot');
 
-      // Determine which direction the card comes from based on actor's seat
+      // No kuras puses nāk lidojošā kārts animācija
       const getActorFrom = (id: number | null): FlyingCard['from'] => {
         if (id === userId) return 'bottom';
         if (id === null) return 'top';
@@ -733,7 +732,7 @@ export function useGameEngine({
       const actorId = d.user_id ?? d.userId;
 
       if (actorId !== userId) {
-        // Another player picked up cards — update shared counts + show their pickup anim
+        // Cits spēlētājs paņēma kārtis — atjaunam skaitus un rādam animāciju
         const newHC = d.hand_counts ?? d.handCounts;
         if (newHC) {
           const actorStr = String(actorId);
@@ -758,8 +757,7 @@ export function useGameEngine({
           if (typeof d.pickup_penalty === 'number') patch.pickupPenalty = d.pickup_penalty;
           dispatch({ type: 'SERVER_SYNC', payload: patch });
         }
-        // Always sync the current turn when another player picks up.
-        // Without this, the next player's client never knows it's their turn.
+        // Obligāti sinhronizē gājienu — citādi nākamais spēlētājs nezin ka ir viņa kārta
         const peerTurn =
           typeof d.turn_player_id === 'number'
             ? d.turn_player_id
@@ -770,8 +768,7 @@ export function useGameEngine({
         return;
       }
 
-      // Ignore immediate self hand-sync while pickup animation is in progress.
-      // pickupCard() applies staged/final hand updates on its own timeline.
+      // Paša sinhronizāciju ignorēm kamēr rit pacelšanas animācija — pickupCard() to pats kontrolē
       if (pickingUpRef.current) return;
 
       const dc =
@@ -828,8 +825,7 @@ export function useGameEngine({
         dispatch({ type: 'SET_TURN', turn: null });
       };
 
-      // Wait for all in-flight animations before showing the game-over modal
-      // If a bot action is still pending we must also wait for the 900ms placement animation it triggers
+      // Gaidam kamēr visi boti un animācijas beidz, tikai tad rādam uzvaras ekrānu
       const botWait = botActionAvailableAtRef.current - Date.now();
       const botRemaining = pendingBotActionsRef.current > 0
         ? Math.max(botWait + 900, 900)   // pending bot delay + placement animation
@@ -861,7 +857,7 @@ export function useGameEngine({
           pausedBy: null,
         },
       });
-      // Reload the room prop so bots removed by reset() are cleared from the player list
+      // Reloadojam istabas datus lai noņemtie boti pazūd no saraksta
       router.reload({ only: ['room'] });
     };
 
@@ -922,24 +918,23 @@ export function useGameEngine({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.id]);
 
-  // ── Resync on mount ─────────────────────────────────────────────────────
+  // Sinhronizācija pie lapas ielādes — ielādē aktuālo stāvokli no servera
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const data = await resyncStateApi(room.id);
         if (cancelled) return;
-        // Store remaining time before dispatching SET_TURN so the timer effect
-        // can pick it up if the turn value changes (or for the first render).
+        // Saglabājam atlikušo laiku pirms SET_TURN lai taimeris pareizi atsākas
         if (data.turn_started_at && data.current_turn != null) {
           const remaining = computeRemaining(data.turn_started_at);
           if (remaining !== null) {
             turnTimeOverrideRef.current = remaining;
-            // Also apply directly in case currentTurn hasn't changed (effect won't re-run).
+            // Arī tieši iestatām gadījumā ja SET_TURN effect neizpildās
             window.setTimeout(() => setTurnTimeLeft(remaining), 0);
           }
         }
-        // Update player list on mount (handles bots added after the page was first loaded)
+        // Atjaunam spēlētāju sarakstu — boti var būt pievienoti pēc lapas ielādes
         if (Array.isArray(data.players) && data.players.length) {
           const merged = uniqById([...(staticRoomPlayersRef.current ?? []), ...data.players]);
           staticRoomPlayersRef.current = merged;
@@ -962,7 +957,7 @@ export function useGameEngine({
     return () => { cancelled = true; };
   }, [room.id]);
 
-  // ── Derived values ───────────────────────────────────────────────────────
+  // Atvasinātās vērtības — aprēķinātas no stāvokļa, netiek saglabātas atsevišķi
   const connectedPlayersLite = useMemo<PlayerLite[]>(
     () => uniqById(connectedPlayers).map((p) => ({ id: String(p.id), name: p.name, avatar_url: p.avatar_url })),
     [connectedPlayers],

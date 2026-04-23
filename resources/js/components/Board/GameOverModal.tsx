@@ -10,6 +10,7 @@ type Props = {
   onLeave: () => void;
 };
 
+// Spēles beigu ekrāns — rāda uzvarētāju un piedāvā spēlēt vēlreiz
 export const GameOverModal: React.FC<Props> = ({
   winnerId,
   userId,

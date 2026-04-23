@@ -20,6 +20,7 @@ const Toggle = ({ checked, onChange }: { checked: boolean; onChange: () => void 
   </button>
 );
 
+// Istabas izveides forma — nosaukums, publiski/privāti, noteikumi, boti
 export default function CreateRoom() {
   const [Name, setName] = useState<string>('');
   const [isPublic, setIsPublic] = useState(true);

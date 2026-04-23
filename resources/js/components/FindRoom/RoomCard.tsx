@@ -15,6 +15,7 @@ type Room = {
   players?: Array<{ id: number; name: string }> | null;
 };
 
+// Vienas istabas kartīte istabas meklēšanas sarakstā
 export default function RoomCard({ room, currentUserId }: { room: Room; currentUserId?: number }) {
   const currentPlayers = room.players?.length || 0;
   const maxPlayers = room.rules.max_players;

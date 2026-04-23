@@ -31,6 +31,7 @@ type Props = {
     };
 };
 
+// Istabas meklēšanas lapa — rāda publikās istabas, automātiski atjaunojas ik 8 sekundes
 export default function FindRoom({ rooms, auth }: Props) {
     const { props } = usePage<{ flash?: { error?: string; success?: string } }>();
     const flashError = props.flash?.error;
@@ -43,7 +44,7 @@ export default function FindRoom({ rooms, auth }: Props) {
     const [maxPlayersFilter, setMaxPlayersFilter] = useState<'all' | '2' | '3' | '4'>('all');
     const [ruleFilter, setRuleFilter] = useState<string>('all');
 
-    // Auto-refresh the room list every 8 seconds so newly created rooms appear
+    // Ik 8 sek. atjauno istabu sarakstu
     useEffect(() => {
         const id = window.setInterval(() => {
             router.reload({ only: ['rooms'] });

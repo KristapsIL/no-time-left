@@ -6,6 +6,7 @@ type DeckProps = {
   pickupCard: () => void;
 };
 
+// Kāršu kava — uzklikšķinot paņem kārti
 export const Deck: React.FC<DeckProps> = React.memo(({ isMyTurn, pickupCard }) => {
   const disabled = !isMyTurn;
 

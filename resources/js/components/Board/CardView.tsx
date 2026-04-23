@@ -11,6 +11,7 @@ function isPlaceholder(c: string) {
   return typeof c === 'string' && c.startsWith('loading_card_');
 }
 
+// Vienas kārts vizuālais attēlojums — noklikšķināma poga ar vērtību un uzvalku
 export const CardView: React.FC<CardViewProps> = ({
   card,
   selected,
@@ -22,7 +23,7 @@ export const CardView: React.FC<CardViewProps> = ({
   ...rest
 }) => {
   if (isPlaceholder(card)) {
-    // Non-interactive placeholder
+    // Ielādes vietāturājs — nav interaktīvs
     return (
       <div
         className={[
@@ -38,7 +39,7 @@ export const CardView: React.FC<CardViewProps> = ({
 
   const parsed = parseCard(card);
   if (!parsed) {
-    // Unknown format: neutral tile
+    // Nezināms formāts — neitrāla plāksne
     return (
       <div
         className={[

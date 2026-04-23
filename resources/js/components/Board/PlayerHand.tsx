@@ -46,6 +46,7 @@ function useElementSize<T extends HTMLElement>() {
   return [ref, sz] as const;
 }
 
+// Spēlētāja roka — rāda savas kārtis un ļauj tās likt uz galda
 export const PlayerHand: React.FC<Props> = React.memo(
   ({
     hand,
@@ -73,12 +74,12 @@ export const PlayerHand: React.FC<Props> = React.memo(
       return () => window.removeEventListener('resize', onResize);
     }, []);
 
-    // ── Draw animation: detect newly added cards ──────────────────────────
+    // Animācija kad rokai tiek pievienotas jaunas kārtis
     const prevHandRef = useRef<string[]>(hand);
-    const [newCardAnimData, setNewCardAnimData] = useState<Map<number, number>>(new Map()); // index → stagger order
+    const [newCardAnimData, setNewCardAnimData] = useState<Map<number, number>>(new Map()); // index → animācijas kārta
     const clearAnimTimerRef = useRef<number | null>(null);
 
-    // Inject CSS keyframe once
+    // CSS keyframe — pievienojam vienu reizi
     useEffect(() => {
       const id = 'deal-card-kf';
       if (!document.getElementById(id)) {
@@ -94,7 +95,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
       prevHandRef.current = hand;
 
       if (hand.length > prev.length) {
-        // Find newly added card indices
+        // Arod jauniezūbāto kāršu indeksus
         const counts = new Map<string, number>();
         for (const c of prev) counts.set(c, (counts.get(c) ?? 0) + 1);
 
@@ -129,14 +130,14 @@ export const PlayerHand: React.FC<Props> = React.memo(
       }
     }, [hand]);
 
-    // ── Mobile card constants ─────────────────────────────────────────────
+    // Mobilo kāršu izmēri
     const MOBILE_CARD_W = 70;
     const MOBILE_CARD_H = 104;
-    // Lifted card goes up this many px when selected/dragged
-    // Keep below z-40 GameOverModal — normal cards z=idx+1, lifted z=20
+    // Paceltā kārts iet augstušup par šo skaitu pikseļu
+    // Neturām z-index virs 40 — GameOverModal ir z-40
     const MOBILE_LIFT_PX = 60;
 
-    // Absolute X positions so all cards fit in the container, no scroll
+    // Absolutās X pozīcijas lai visas kārtis iedītos
     const mobilePositions = useMemo(() => {
       const n = hand.length;
       if (n === 0) return [];
@@ -149,7 +150,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
       return Array.from({ length: n }, (_, i) => i * step);
     }, [hand.length, mobileSize.width]);
 
-    // ── Mobile drag-to-play (no scroll, immediate capture) ────────────────
+    // Mobilais drag-to-play — tver pointerus tiekat
     const [dragIdx, setDragIdx] = useState<number | null>(null);
 
     const computeCardIdxFromX = useCallback(
@@ -158,7 +159,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
         if (!container || mobilePositions.length === 0) return null;
         const rect = container.getBoundingClientRect();
         const relX = clientX - rect.left;
-        // Find card whose centre is nearest to touch point
+        // Arod kārti kura centrs ir vistuvAk touch punktam
         let best = 0;
         let bestDist = Infinity;
         for (let i = 0; i < mobilePositions.length; i++) {
@@ -200,7 +201,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
 
     const onMobilePointerCancel = useCallback(() => setDragIdx(null), []);
 
-    // Cleanup on unmount
+    // Notīra taimerus kad komponents pazūd
     useEffect(
       () => () => {
         if (clearAnimTimerRef.current !== null) window.clearTimeout(clearAnimTimerRef.current);
@@ -208,7 +209,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
       []
     );
 
-    // ── Layout math ───────────────────────────────────────────────────────
+    // Izkartojuma aprēķini
     const {
       positions,
       needsScroll,
@@ -394,7 +395,7 @@ export const PlayerHand: React.FC<Props> = React.memo(
                 className="absolute bottom-0 transition-transform duration-100 ease-out"
                 style={{
                   left: mobilePositions[idx] ?? 0,
-                  // Keep z-indexes low (max ~20 for lifted) so GameOverModal at z-40 paints above
+                  // z-index max ~20 lai GameOverModal (z-40) būtu virsū
                   zIndex: isLifted ? 20 : idx + 1,
                   transform: isLifted ? `translateY(-${MOBILE_LIFT_PX}px)` : 'none',
                 }}

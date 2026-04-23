@@ -85,7 +85,7 @@ const MobileOpponentFan = memo(function MobileOpponentFan({
   const startDeg = -totalDeg / 2;
   const step = show > 1 ? totalDeg / (show - 1) : 0;
 
-  // Container wide enough to hold the fanned cards without clipping
+  // Konteiners pietiekami plats lai visi fani iedītos
   const halfSpread = Math.round((CH + ARC_R) * Math.sin((totalDeg / 2) * (Math.PI / 180))) + 2;
   const containerW = CW + halfSpread * 2 + 4;
   const containerH = CH + 8;
@@ -99,7 +99,7 @@ const MobileOpponentFan = memo(function MobileOpponentFan({
           : 'bg-black/20',
       ].join(' ')}
     >
-      {/* Name ABOVE fan */}
+      {/* Vārds virs fana */}
       <span
         className={`text-[10px] font-semibold truncate max-w-[80px] leading-none ${
           isTurn ? 'text-yellow-300' : 'text-white/70'
@@ -108,7 +108,7 @@ const MobileOpponentFan = memo(function MobileOpponentFan({
         {player.name ?? `P${player.id}`}
       </span>
 
-      {/* Arc fan */}
+      {/* Kāršu fans */}
       <div className="relative" style={{ width: containerW, height: containerH }}>
         {Array.from({ length: show }, (_, i) => {
           const angle = startDeg + i * step;
@@ -137,7 +137,7 @@ const MobileOpponentFan = memo(function MobileOpponentFan({
         })}
       </div>
 
-      {/* Card count below */}
+      {/* Kāršu skaits zem fana */}
       <span
         className={`text-[10px] font-bold tabular-nums leading-none ${
           isTurn ? 'text-yellow-400' : 'text-white/40'
@@ -149,7 +149,7 @@ const MobileOpponentFan = memo(function MobileOpponentFan({
   );
 });
 
-// ── Board ─────────────────────────────────────────────────────────────────────
+// Galvenā spēles lapa — rāda galdu, rokas, pretiniekus un apstrādā visu spēles loģiku
 export default function Board() {
   const { props } = usePage<Props>();
   const { room, deck, usedCards, handCounts, myHand, gameStatus, currentTurn, turnStartedAt, winnerId, userId, creatorId, pickupPenalty } = props;
@@ -204,7 +204,7 @@ export default function Board() {
     toast,
   });
 
-  // ── Collect all opponents for mobile strip (in turn order: left → top → right) ──
+  // Kura spēlētāja kārta — vārds priekš UI
   const currentTurnName = useMemo(() => {
     if (game.currentTurn == null) return null;
     if (game.currentTurn === userId) return 'You';
@@ -224,7 +224,7 @@ export default function Board() {
     <AppLayout>
       <Head title="Game" />
 
-      {/* ── Game board ────────────────────────────────────────────────── */}
+      {/* Spēles galda laukums */}
       {/* isolate creates its own stacking context so hand z-indexes can't bleed
            above the sidebar Sheet (z-50) which lives outside this div */}
       <div
@@ -239,7 +239,7 @@ export default function Board() {
           pt-[max(env(safe-area-inset-top),8px)] pb-[max(env(safe-area-inset-bottom),8px)]
         "
       >
-        {/* ── Waiting lobby: absolute within content area so sidebar stays usable ── */}
+        {/* Gaidīšanas ekrāns — absolute lai sānpanelis paliek pieejams */}
         {game.status === 'waiting' && (
           <WaitingLobby
             players={connectedPlayers}
@@ -257,7 +257,7 @@ export default function Board() {
           />
         )}
 
-        {/* ── Paused overlay ───────────────────────────────────────────── */}
+        {/* Apturētas spēles pārklājums */}
         {game.status === 'paused' && (
           <div className="absolute inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-zinc-950 border border-white/10 rounded-2xl p-8 w-full max-w-sm text-zinc-100 space-y-4 shadow-2xl text-center">
@@ -281,8 +281,8 @@ export default function Board() {
             </div>
           </div>
         )}
-        {/* ── Row 1: Opponents ────────────────────────────────────────── */}
-        {/* Mobile: all opponents as compact arc fans in one strip (turn order) */}
+        {/* 1. rinda: pretinieki */}
+        {/* Mobilais skats — visi pretinieki kompaktā joslā (gājienu secībā) */}
         <div className="md:hidden row-start-1 col-start-1 flex items-end justify-center gap-1.5 px-2 pt-1 flex-wrap min-h-[92px]">
           {allMobileOpponents.length > 0 ? (
             allMobileOpponents.map(({ seat, count }, idx) => (
@@ -302,7 +302,7 @@ export default function Board() {
           )}
         </div>
 
-        {/* Desktop: top opponent fan */}
+        {/* Dators: augšējais pretinieks */}
         <div className="hidden md:flex row-start-1 col-start-2 min-w-0 items-center justify-center [container-type:inline-size] min-h-[120px]">
           {seats.top ? (
             <OpponentHandRail
@@ -316,7 +316,7 @@ export default function Board() {
           )}
         </div>
 
-        {/* ── Desktop Left ─────────────────────────────────────────────── */}
+        {/* Dators: kreisais pretinieks */}
         <div className="hidden md:flex row-start-2 col-start-1 min-w-0 items-start justify-center overflow-visible">
           {seats.left ? (
             <OpponentHandRail
@@ -330,7 +330,7 @@ export default function Board() {
           )}
         </div>
 
-        {/* ── Center table ─────────────────────────────────────────────── */}
+        {/* Galda centrs */}
         <div className="row-start-2 col-start-1 md:col-start-2 min-w-0 flex items-center justify-center">
           <CenterTable
             topCard={game.topCard}
@@ -351,7 +351,7 @@ export default function Board() {
           />
         </div>
 
-        {/* ── Desktop Right ────────────────────────────────────────────── */}
+        {/* Dators: labais pretinieks */}
         <div className="hidden md:flex row-start-2 col-start-3 min-w-0 items-start justify-center overflow-visible">
           {seats.right ? (
             <OpponentHandRail
@@ -365,10 +365,10 @@ export default function Board() {
           )}
         </div>
 
-        {/* ── Bottom: hand + controls ───────────────────────────────────── */}
+        {/* Apakša: roka un vadīklas */}
         <div className="row-start-3 col-span-1 md:col-span-3 flex flex-col items-center gap-2 md:gap-1.5 pb-1.5 md:pb-0">
           <div className="relative w-full flex flex-col items-center">
-            {/* Pickup penalty badge */}
+            {/* +2 soda nozīmīte */}
             {game.pickupPenalty > 0 && (
               <div
                 className={[
@@ -383,7 +383,7 @@ export default function Board() {
                   : `⚠ Pending +${game.pickupPenalty}`}
               </div>
             )}
-            {/* Drawn card: absolute overlay above the hand (does not affect layout) */}
+            {/* Paceltas kārts pārklājums virs rokas — neietekmē izkārtojumu */}
             {showDrawnPlayOption && drawnCards.length > 0 && (
               <div
                 className="absolute z-50 pointer-events-none"
@@ -417,8 +417,7 @@ export default function Board() {
               hand={
                 showDrawnPlayOption && drawnCards.length > 0
                   ? (() => {
-                      // Remove exactly one copy of the drawn card from the display hand
-                      // so it appears to still be "in the other hand" until decided
+                      // Noņemam vienu kopiju no paceltas kārts lai tā rādās 'otrajā rokā' līdz lēmumam
                       const idx = game.hand.indexOf(drawnCards[0]);
                       if (idx === -1) return game.hand;
                       return [...game.hand.slice(0, idx), ...game.hand.slice(idx + 1)];
@@ -450,19 +449,19 @@ export default function Board() {
 
         <RoomChat roomId={room.id} isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
 
-        {/* ── Dismiss drawn-card decision by tapping outside ─────────────── */}
-        {/* Must be INSIDE the isolate div (z-30 here < drawn card z-40 = button wins clicks) */}
+        {/* Aizver paceltas kārts lēmumu pieskaroties ārpus tās */}
+        {/* Jābūt IEKŠĀ isolate div — z-30 šeit < z-40 pacelstajai kārtij, tāpēc klikšķi aiziet uz pogas */}
         {showDrawnPlayOption && drawnCards.length > 0 && (
           <div
             className="absolute inset-0 z-30"
             onClick={() => {
-              // Keep the drawn card in hand and close decision UI; turn is not passed here.
+              // Aizver lēmumu un patur kārti rokā — gājiens vēl netiek dots tālāk
               keepDrawnCard();
             }}
           />
         )}
 
-        {/* ── Game over modal — scoped to board content area ────────────── */}
+        {/* Spēles beigu modāls */}
         {game.status === 'finished' && (
           <GameOverModal
             winnerId={game.winnerId}

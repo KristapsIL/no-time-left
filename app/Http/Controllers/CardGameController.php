@@ -20,6 +20,7 @@ use App\Events\HandSynced;
 
 class CardGameController extends Controller
 {
+    // Pārbauda vai lietotājs ir šīs istabas dalībnieks, citādi met 403
     protected function ensureRoomMembership(Room $room, int $userId): void
     {
         if (!$room->players()->where('users.id', $userId)->exists()) {
@@ -27,12 +28,13 @@ class CardGameController extends Controller
         }
     }
 
+    // Ja iestatīti boti, pievieno tos istabai līdz vajadzīgajam skaita
     protected function ensureMinimumPlayersWithBots(Room $room): void
     {
         $rules = $room->rules;
         $configuredBots = max(0, (int) ($rules?->bot_fill_count ?? 0));
 
-        // No bots configured — don't auto-fill
+        // Nav konfigurēti boti — neko nedarām
         if ($configuredBots === 0) {
             return;
         }
@@ -63,11 +65,13 @@ class CardGameController extends Controller
         }
     }
 
+    // Vai konkrētais lietotāja ID pieder botam
     protected function isBotUserId(int $userId): bool
     {
         return User::query()->whereKey($userId)->where('role', 'bot')->exists();
     }
 
+    // Atgriež nākamā spēlētāja ID pievienošanās secībā
     protected function nextPlayerId(Room $room, ?int $currentTurn): ?int
     {
         $playerIds = $room->players()
@@ -89,6 +93,7 @@ class CardGameController extends Controller
         return $playerIds[$nextIndex] ?? null;
     }
 
+    // Izpilda botu gājienus pēc kārtas, kamēr nākamais ir cilvēks vai spēle beidzas
     public function runBotTurns(int $roomId): void
     {
         for ($i = 0; $i < 50; $i++) {
@@ -322,6 +327,7 @@ class CardGameController extends Controller
         }
     }
 
+    // Bots izvēlas labāko kārti
     protected function chooseBotCard(array $hand, ?string $topCard, string $difficulty): ?string
     {
         $playable = [];
@@ -394,6 +400,7 @@ class CardGameController extends Controller
         return $bestCard;
     }
 
+    // Ielādē spēles lapu — visu sākotnējo stāvokli Inertia renderēšanai
     public function board(Request $request, int $roomId)
     {
         $user = $request->user();
@@ -452,6 +459,7 @@ class CardGameController extends Controller
     }
 
 
+    // Atjauno spēli — notīra datus, dzēš botus, paziņo visiem
     public function reset(Request $request, int $roomId): \Illuminate\Http\JsonResponse
     {
         $userId = (int) $request->user()->id;
@@ -474,7 +482,7 @@ class CardGameController extends Controller
             $game->pickup_penalty = 0;
             $game->save();
 
-            // Remove bots so they don't persist into the next game
+            // Dzēš botus lai tie neparādās nākamajā spēlē
             $botIds = $room->players()->where('users.role', 'bot')->pluck('users.id');
             if ($botIds->isNotEmpty()) {
                 $room->players()->detach($botIds->all());
@@ -487,6 +495,7 @@ class CardGameController extends Controller
         return response()->json(['ok' => true], 200);
     }
 
+    // Saglabā istabas iestatījumus — pieejams tikai istabas radītājam
     public function updateRoomSettings(Request $request, int $roomId): \Illuminate\Http\JsonResponse
     {
         $userId = (int) $request->user()->id;
@@ -510,6 +519,7 @@ class CardGameController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    // Izveido standarta 52 kāršu kavu (vai 104 ar double_deck noteikumu)
     protected function buildDeck(array $rules = []): array
     {
         $suits = ['♠', '♥', '♦', '♣'];
@@ -522,7 +532,7 @@ class CardGameController extends Controller
             }
         }
 
-        // Double deck rule: play with 104 cards
+        // double_deck noteikums — spēlē ar divām kavām (104 kārtis)
         if (in_array('double_deck', $rules, true)) {
             $deck = array_merge($deck, $deck);
         }
@@ -530,6 +540,7 @@ class CardGameController extends Controller
         return $deck;
     }
 
+    // Pārbauda vai spēli var sākt — pietiek spēlētāju, nav jau sākta utt.
     protected function validateStartConditions(Room $room, int $userId): void
     {
         if (!$room->players()->whereKey($userId)->exists()) {
@@ -545,6 +556,7 @@ class CardGameController extends Controller
         }
     }
 
+    // Izdala noteiktu skaitu kāršu katram spēlētājam no kavas
     protected function dealCards(array &$deck, Collection $players, int $cardsPerPlayer): array
     {
         $hands = [];
@@ -556,6 +568,7 @@ class CardGameController extends Controller
 
         return $hands;
     }
+    // Uzraksta spēles sākuma stāvokli datubāzē
     protected function initializeGame(CardGame $game, array $hands, array $deck, array $usedCards, int $firstPlayerId): void
     {
         $game->fill([
@@ -570,67 +583,64 @@ class CardGameController extends Controller
     public function startGame(Request $request, int $roomId)
     {
         try {
-            // Iegūst pašreizējā lietotāja ID
             $userId = $request->user()->id;
 
-            // Only the room creator may start the game
+            // Tikai radītājs var sākt spēli
             $room = Room::findOrFail($roomId);
             if ((int) $room->created_by !== (int) $userId) {
                 abort(403, 'Only the room creator can start the game.');
             }
 
             
-            // Veic spēles inicializāciju transakcijā, lai nodrošinātu datu konsekvenci,
-            // visas izmaiņas (spēles stāvoklis, kava, spēlētāju rokas) tiek veiktas kopā.
-            // Ja kāda darbība neizdodas, transakcija tiek atcelta, lai izvairītos no nekorektiem datiem.
+            // Viss notiek transakcijā — ja kaut kas noiet greizi, nekādas izmaiņas netiek saglabātas
 
             [$game, $hands, $deck, $usedCards, $players] = DB::transaction(function () use ($roomId, $userId) {
-                // Bloķē istabu un ielādē saistītos datus (spēlētāji, spēle, noteikumi)
+                // Bloķē istabu lai paralēli pieprasījumi neizjauc datu stāvokli
                 $room = Room::with(['players', 'game', 'rules'])->lockForUpdate()->findOrFail($roomId);
 
                 $this->ensureMinimumPlayersWithBots($room);
 
                 $room->load('players');
 
-                // Pārbauda vai spēli drīkst sākt (piemēram, pietiek spēlētāju)
+                // Pārbauda minimālos nosacījumus pirms spēles sākuma
                 $this->validateStartConditions($room, $userId);
 
-                // Izveido jaunu spēles ierakstu, ja tāds neeksistē
+                // Izmanto esošo vai izveido jaunu spēles ierakstu
                 $game = $room->game ?? new CardGame(['room_id' => $room->id]);
 
-                // Izveido un sajauc kāršu kavu
+                // Kava un sajaukšana
                 $rules = $room->rules?->rules ?? [];
                 $deck = $this->buildDeck($rules);
                 shuffle($deck);
 
-                // Nosaka kāršu skaitu katram spēlētājam (pēc noteikumiem vai noklusējuma)
+                // Kāršu skaits pēc noteikumiem, noklusējums 6
                 $cardsPerPlayer = $room->rules->cards_per_player ?? 6;
 
-                // Iegūst spēlētājus pievienošanās secībā
+                // Spēlētāji pievienošanās secībā — tā arī būs gājienu kārta
                 $players = $room->players()->orderBy('room_user.created_at')->get();
 
-                // Izdala kārtis spēlētājiem
+                // Izdala kārtis
                 $hands = $this->dealCards($deck, $players, $cardsPerPlayer);
 
-                // Paņem pirmo kārti uz galda un atzīmē kā izmantotu
+                // Pirmā kārts uz galda
                 $firstCard = array_shift($deck);
                 $usedCards = [$firstCard];
 
-                // Nosaka pirmo gājienu pirmajam spēlētājam
+                // Pirmais iet tas, kurš pievienojās pirmais
                 $firstTurnId = $players->first()->id;
 
-                // Saglabā spēles stāvokli datubāzē (rokas, kava, izmantotās kārtis, gājiena ID)
+                // Saglabā visu datubāzē
                 $this->initializeGame($game, $hands, $deck, $usedCards, $firstTurnId);
 
                 return [$game, $hands, $deck, $usedCards, $players];
             });
 
-            // Sagatavo datus notikumu izsūtīšanai (roku skaits, kavas skaits, pašreizējais gājiens)
+            // Sagatavo broadcast datus
             $handCounts = collect($hands)->map(fn($h) => count($h))->toArray();
             $deckCount = count($deck);
             $turnId = $game->current_turn;
 
-            // Paziņo visiem par spēles sākumu
+            // Paziņo visiem spēlētājiem par spēles sākumu
             broadcast(new GameStarted(
                 roomId: $game->room_id,
                 handCounts: $handCounts,
@@ -644,7 +654,7 @@ class CardGameController extends Controller
                 ])->values()->toArray(),
             ));
 
-            // Sinhronizē katra spēlētāja roku individuāli
+            // Katrs spēlētājs saņem savu roku atsevišķi
             foreach ($players as $p) {
                 $pid = (int) $p->id;
                 broadcast(new HandSynced(
@@ -660,13 +670,14 @@ class CardGameController extends Controller
 
             $this->runBotTurns($game->room_id);
 
-            // Return JSON so the frontend can update state without a page redirect.
+            // Atgriežam JSON lai priekšgals var atjaunot stāvokli bez lapas pārlādes
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }
     }
 
+    // Spēlētājs liek kārti uz galda — validē, atjauno stāvokli, paziņo pārējiem
     public function playCard(Request $request, int $roomId)
     {
         $request->validate([
@@ -831,6 +842,7 @@ class CardGameController extends Controller
 
     }
 
+    // Vai kārti drīkst likt uz esošās augšējās kārtis (sakrīt krāsa vai vērtība)
     protected function isValidPlay(string $card, string $topCard): bool
     {
         [$cValue, $cSuit]   = $this->splitCard($card);
@@ -839,6 +851,7 @@ class CardGameController extends Controller
         return $cSuit === $tSuit || $cValue === $tValue;
     }
 
+    // Sadala kārts kodu — '10-♠' kļūst par ['10', '♠']
     protected function splitCard(string $code): array
     {
         $parts = explode('-', $code, 2);
@@ -846,6 +859,7 @@ class CardGameController extends Controller
         $suit  = $parts[1] ?? '';
         return [$value, $suit];
     }
+    // Ja kava ir tukša, sajauc izmantotās kārtis atpakaļ kavā (virsējā paliek)
     private function checkDeckAndReshuffle(array &$deck, \App\Models\CardGame $game): void
     {
         $used = $game->used_cards ?? [];
@@ -869,6 +883,7 @@ class CardGameController extends Controller
         }
     }
 
+    // Spēlētājs paņem kārti(s) no kavas — atbalsta sodus (+2) un pick_up_till_match noteikumu
     public function pickUpCard(Request $request, int $roomId)
     {
         $userId = (int) $request->user()->id;
@@ -892,7 +907,7 @@ class CardGameController extends Controller
             $pickUpTillMatch = in_array('pick_up_till_match', $roomRules, true);
             $penalty         = (int) ($game->pickup_penalty ?? 0);
 
-            // ── Penalty draw: forced card pickup due to a +2 ─────────────────────
+            // Soda pacelšana — +2 no pretinieka, obligāti jāpaņem kārtis
             if ($penalty > 0 && $plusTwoActive) {
                 for ($i = 0; $i < $penalty; $i++) {
                     $this->checkDeckAndReshuffle($deck, $game);
@@ -938,7 +953,6 @@ class CardGameController extends Controller
                 $drawnCount = 0;
 
                 if ($pickUpTillMatch) {
-                    // ── Draw cards one at a time until a playable card is found ──────
                     while (true) {
                         $this->checkDeckAndReshuffle($deck, $game);
                         if (count($deck) === 0) break;
@@ -950,7 +964,7 @@ class CardGameController extends Controller
                         $drawnCount++;
 
                         if ($topCard && $this->isValidPlay($card, $topCard)) {
-                            break; // Found a playable card — stop drawing
+                            break;
                         }
                     }
 
@@ -974,7 +988,7 @@ class CardGameController extends Controller
                     $game->save();
 
                 } else {
-                    // ── Normal: draw exactly one card ────────────────────────────────
+                    // Parastā pacelšana — viena kārts
                     $this->checkDeckAndReshuffle($deck, $game);
                     if (count($deck) > 0) {
                         $drawnCard = array_shift($deck);
@@ -986,8 +1000,7 @@ class CardGameController extends Controller
                     $game->player_hands = $hands;
                     $game->deck         = array_values($deck);
 
-                    // Only the drawn card may be played after a normal pickup,
-                    // not any pre-existing card in hand.
+                    // Pēc pacelšanas drīkst likt tikai tikko pacelto kārti, nevis jebkuru no rokas
                     $canPlayAfterPickup = isset($drawnCard)
                         ? ($topCard ? $this->isValidPlay((string) $drawnCard, (string) $topCard) : true)
                         : false;
@@ -1002,7 +1015,7 @@ class CardGameController extends Controller
                 }
 
             } else {
-                // ── Player already drew — tapping deck again passes the turn ─────────
+                // Spēlētājs jau pacēla — otrreiz pieskaroties kavai, gājiens iet tālāk
                 $game->current_turn  = (int) $this->nextPlayerId($room, (int) $game->current_turn);
                 $game->has_picked_up = false;
                 $game->save();
@@ -1052,6 +1065,7 @@ class CardGameController extends Controller
         ], 200);
     }
 
+    // Spēlētājs pielaiž gājienu — nākamajam spēlētājam ir kārta
     public function passTurn(Request $request, int $roomId)
     {
         $userId = (int) $request->user()->id;
@@ -1110,6 +1124,7 @@ class CardGameController extends Controller
         ], 200);
     }
 
+    // Atgriež pilnu spēles stāvokli — izmanto pēc lapas pārlādes vai reconnect
     public function resyncState(Request $request, int $roomId)
     {
         $userId = $request->user()->id;

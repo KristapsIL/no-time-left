@@ -9,18 +9,17 @@ type OpponentHandRailProps = {
   label?: React.ReactNode;
 };
 
+// Pretinieka roku josla — kreisā, augšējā vai labā puse atkarībā no sēdvietas
 export const OpponentHandRail: React.FC<OpponentHandRailProps> = ({
   side,
   handCount,
   isTurn,
   label,
 }) => {
-  // ── Side rails: rotated horizontal fan ───────────────────────────────────
+  // Sānu joslas — pagriezts horizontals fans
   if (side !== 'top') {
-    // The fan is the same card size as the top rail (88×128).
-    // We rotate a wide-but-short div 90° so it appears tall-but-narrow inside
-    // the 130/150px column. "FAN_W" becomes the visual height; "CARD_H + gap"
-    // becomes the visual width (which should fit inside the column).
+    // Kāršu izmēri tAdi paši kā augšējai joslai (88×128).
+    // Div tiek pagriezts par 90° lai fans izskatās augsts, nevis plats.
     const CARD_W  = 88;
     const CARD_H  = 128;
     const FAN_W   = 300;   // virtual width → becomes visual height
@@ -75,7 +74,7 @@ export const OpponentHandRail: React.FC<OpponentHandRailProps> = ({
     );
   }
 
-  // ── Top rail: horizontal fan ─────────────────────────────────────────────
+  // Augšējā josla — horizontals fans
   const TOP_INLINE_SIZE = 'clamp(280px, 40cqi, 620px)';
   const TOP_BLOCK_SIZE  = 150;
 

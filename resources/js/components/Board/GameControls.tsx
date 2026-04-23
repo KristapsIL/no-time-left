@@ -7,6 +7,7 @@ type Props = {
   leaveGame: () => void;
 };
 
+// Pogas augšējā stūrī — čats un istabas atstāšana
 export const GameControls: React.FC<Props> = ({ isChatOpen, toggleChat, leaveGame }) => {
   return (
     <div className="flex flex-col items-stretch gap-2 rounded-xl border border-sidebar-border/70 bg-sidebar/95 p-2 shadow-lg backdrop-blur-sm">

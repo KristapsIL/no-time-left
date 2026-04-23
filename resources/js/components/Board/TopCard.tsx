@@ -1,6 +1,7 @@
 import React from 'react';
 import { CardView } from '@/components/Board/CardView';
 
+// Augšējā (galda) kārts — rāda pašreizējo kārti uz kuras jāliek
 export const TopCard: React.FC<{ topCard: string | null; isPlacing?: boolean }> = ({ topCard, isPlacing = false }) => {
   return (
     <div className="flex items-center justify-center">

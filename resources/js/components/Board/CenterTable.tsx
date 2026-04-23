@@ -6,7 +6,7 @@ import { CardBack } from '@/components/Board/CardBack';
 import { TurnInfo } from '@/components/Board/TurnInfo';
 import type { FlyingCard } from '@/hooks/useGameEngine';
 
-// Starting transform for each card-origin direction (placement animation)
+// Sākotne transformācija pa kuri kartes nāk (likšanas animācija)
 function startTransform(from: FlyingCard['from']): string {
   switch (from) {
     case 'bottom': return 'translate(-50%, 250%) scale(1.05) rotate(-6deg)';
@@ -34,6 +34,7 @@ type Props = {
   currentTurnName?: string | null;
 };
 
+// Tabulas centrs — kava, galda kārts, lidojošā kārts un gājiena animācija
 export const CenterTable: React.FC<Props> = ({
   topCard,
   isPlacementLocked,
@@ -51,7 +52,7 @@ export const CenterTable: React.FC<Props> = ({
   peerPickupAnims,
   currentTurnName,
 }) => {
-  // Inject animation keyframes once
+  // Pievienojam animācijas keyframes, tikai vienu reizi
   useEffect(() => {
     const id = 'card-anim-kf';
     if (!document.getElementById(id)) {

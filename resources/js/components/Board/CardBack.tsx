@@ -4,37 +4,38 @@ type Props = {
   width: number;
   height: number;
 
-  /** Main fill color (back color). Example: '#4338ca' (indigo-600) */
+  /** Galvenā aizpildes krāsa (mugurpuses krāsa). Piem.: '#4338ca' (indigo-600) */
   fillColor?: string;
 
-  /** Band around the dots area (the ring *inside* the outer rim). Example: '#0f172a' (slate-900) */
+  /** Josla ap punktu laukumu (gredzens *iekš* ārējā apmales). Piem.: '#0f172a' (slate-900) */
   bandColor?: string;
 
-  /** Outer rim color (the card’s main border). If omitted, uses a darker fillColor. */
+  /** Ārējās apmales krāsa. Ja nav norādīts, izmanto tumšāku fillColor. */
   rimColor?: string;
 
-  /** Optional center label */
+  /** Izvēles centrālā etiķete */
   label?: string;
 
-  /** Extra class/style passthroughs */
+  /** Klases un stila nodošana tālāk */
   className?: string;
   style?: React.CSSProperties;
 };
 
+// Kartes mugurpuse — zīmē reālistisku karti ar gradientiem un punktu rakstu
 export const CardBack: React.FC<Props> = ({
   width,
   height,
-  fillColor = '#4338ca',  // indigo-600
-  bandColor = '#0f172a',  // slate-900
+  fillColor = '#4338ca',  // indigo-600 (noklusējums)
+  bandColor = '#0f172a',  // slate-900 (noklusējums)
   rimColor,
   label = 'DURAK',
   className = '',
   style,
 }) => {
-  // ---- Sizing tuned to feel like a real card ----
-  const radius = Math.round(height * 0.08);             // ~8% height corner radius
-  const edgePx = Math.max(2, Math.round(height * 0.02)); // white edge thickness
-  const bandOuterInset = edgePx + 2;                     // where the band starts
+  // Izmēri pielāgoti lai izskatās pēc īstas kārtis
+  const radius = Math.round(height * 0.08);             // ~8% augstuma stūra rādiuss
+  const edgePx = Math.max(2, Math.round(height * 0.02)); // baltās malas biezums
+  const bandOuterInset = edgePx + 2;
   const innerBorderInset = bandOuterInset + Math.max(6, Math.round(height * 0.025));
   const dotsInset = innerBorderInset + 3;
 
@@ -42,7 +43,7 @@ export const CardBack: React.FC<Props> = ({
   const borderRadiusInner = Math.max(4, radius - innerBorderInset + 1);
   const borderRadiusDots = Math.max(3, radius - dotsInset + 2);
 
-  // Fallback rim color if not provided: a darker version of fillColor via overlay trick
+  // Ja nav dotsrimColor, izmantojam puscaurspdīgu melno
   const outerRimColor = rimColor ?? 'rgba(0,0,0,0.35)';
 
   return (
@@ -52,7 +53,7 @@ export const CardBack: React.FC<Props> = ({
         width,
         height,
         borderRadius: radius,
-        // Drop shadow like a real card on table
+        // Ēna kā īstai kārtij uz galda
         boxShadow: `
           0 8px 14px rgba(0,0,0,0.24),
           0 3px 6px rgba(0,0,0,0.18)
@@ -62,7 +63,7 @@ export const CardBack: React.FC<Props> = ({
       aria-label="Card back"
       draggable={false}
     >
-      {/* Base fill (main back color) — solid so no transparency */}
+      {/* Pamata aizpildījums (galvenā mugurpuses krāsa) — ciets, bez caurspīdīguma */}
       <div
         className="absolute inset-0"
         style={{
@@ -70,7 +71,7 @@ export const CardBack: React.FC<Props> = ({
           backgroundColor: fillColor,
         }}
       />
-      {/* Subtle diagonal highlight overlay */}
+      {/* Smalks diagonāls apgaismojums */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -79,23 +80,23 @@ export const CardBack: React.FC<Props> = ({
         }}
       />
 
-      {/* White paper edge + outer rim (bevel) */}
+      {/* Baltā papīra mala + ārējā apmale (skava) */}
       <div
         className="absolute inset-0"
         style={{
           borderRadius: radius,
-          // Two inner strokes: paper edge (white) + a darker rim to separate from table
+          // Divi iekšējie kontūri: papīra mala (balta) + tumšāka apmale, lai atdalītu no galda
           boxShadow: `
             inset 0 0 0 ${edgePx}px #ffffff,
             inset 0 0 0 ${edgePx + 1}px ${outerRimColor},
-            inset 0 2px 6px rgba(0,0,0,0.18),    /* top bevel */
-            inset 0 -2px 6px rgba(255,255,255,0.08) /* bottom sheen */
+            inset 0 2px 6px rgba(0,0,0,0.18),    /* augšējā skava */
+            inset 0 -2px 6px rgba(255,255,255,0.08) /* apakšējais spīdums */
           `,
           pointerEvents: 'none',
         }}
       />
 
-      {/* BAND (inside the rim, around the dots) */}
+      {/* JOSLA (iekš apmales, ap punktiem) */}
       <div
         className="absolute"
         style={{
@@ -107,18 +108,18 @@ export const CardBack: React.FC<Props> = ({
         }}
       />
 
-      {/* Inner inset border hugging the dots area (same family as bandColor) */}
+      {/* Iekšējā robežlīnija ap punktu laukumu (tās pašas krāsas saime) */}
       <div
         className="absolute"
         style={{
           left: innerBorderInset, top: innerBorderInset,
           right: innerBorderInset, bottom: innerBorderInset,
           borderRadius: borderRadiusInner,
-          boxShadow: `inset 0 0 0 1.25px ${bandColor}99`, // 60% alpha
+          boxShadow: `inset 0 0 0 1.25px ${bandColor}99`, // 60% necaurspīdīgums
         }}
       />
 
-      {/* Dots area (you said dots are fine — preserved) */}
+      {/* Punktu laukums */}
       <div
         className="absolute"
         style={{
@@ -132,7 +133,7 @@ export const CardBack: React.FC<Props> = ({
         }}
       />
 
-      {/* Subtle paper noise over everything (for realism) */}
+      {/* Smalks papīra troksnis pāri visam (reālismam) */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -146,7 +147,7 @@ export const CardBack: React.FC<Props> = ({
         }}
       />
 
-      {/* Specular gloss strip (laminate look) */}
+      {/* Spīduma josla (laminēta izskata efekts) */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -157,7 +158,7 @@ export const CardBack: React.FC<Props> = ({
         }}
       />
 
-      {/* Center label (small, not too loud) */}
+      {/* Centrālā etiķete (maza, neuzkrītoša) */}
       <div className="absolute inset-0 grid place-items-center">
         <span
           className="font-extrabold tracking-widest select-none"
