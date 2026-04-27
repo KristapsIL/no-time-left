@@ -235,6 +235,29 @@ class RoomController extends Controller
         $maxPlayers = $room->rules->max_players ?? 4;
 
         if ($currentPlayerCount >= $maxPlayers) {
+            $gameIsWaiting = !$game || $game->isWaiting();
+            $botToReplace = $gameIsWaiting
+                ? $room->players()->where('users.role', 'bot')->orderBy('room_user.created_at')->first()
+                : null;
+
+            if ($botToReplace) {
+                DB::transaction(function () use ($roomId, $userId, $botToReplace) {
+                    DB::table('room_user')->where('room_id', $roomId)->where('user_id', $botToReplace->id)->delete();
+                    User::whereKey($botToReplace->id)->delete();
+
+                    DB::table('room_user')->updateOrInsert(
+                        ['user_id' => $userId],
+                        [
+                            'room_id'    => $roomId,
+                            'updated_at' => now(),
+                            'created_at' => now(),
+                        ]
+                    );
+                });
+
+                return redirect()->route('board', ['roomId' => $roomId])
+                    ->with('success', 'Successfully joined the room!');
+            }
             return redirect()->route('findRoom')
                 ->with('error', 'Cannot join room: room is full.');
         }
@@ -308,7 +331,11 @@ class RoomController extends Controller
                 ->count();
 
             if ($humanCount === 0) {
+                $botIds = $room->players()->where('users.role', 'bot')->pluck('users.id');
                 $room->delete();
+                if ($botIds->isNotEmpty()) {
+                    User::whereIn('id', $botIds)->delete();
+                }
             }
         });
 

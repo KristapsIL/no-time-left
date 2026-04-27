@@ -19,7 +19,6 @@ class Room extends Model
     
     public function players(){
         return $this->belongsToMany(User::class)
-                ->withPivot('role')
                 ->withTimestamps();
     }
 
