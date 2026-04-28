@@ -27,6 +27,7 @@ type Props = {
             id: number;
             name: string;
             email: string;
+            role?: string;
         };
     };
 };
@@ -233,7 +234,7 @@ export default function FindRoom({ rooms, auth }: Props) {
                     ) : (
                         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {filteredRooms.map((room) => (
-                            <RoomCard key={room.id} room={room} currentUserId={auth.user.id} />
+                            <RoomCard key={room.id} room={room} currentUserId={auth.user.id} isAdmin={auth.user.role === 'admin'} />
                         ))}
                         </div>
                     )}

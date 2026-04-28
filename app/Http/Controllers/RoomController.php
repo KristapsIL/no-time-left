@@ -341,4 +341,24 @@ class RoomController extends Controller
 
         return redirect()->route('findRoom');
     }
+
+    // Admins var dzēst jebkuru istabu — notīra arī botus un spēles datus
+    public function destroy(Request $request, int $roomId)
+    {
+        if ($request->user()->role !== 'admin') {
+            abort(403, 'Only admins can delete rooms.');
+        }
+
+        $room = Room::with('players')->findOrFail($roomId);
+
+        DB::transaction(function () use ($room) {
+            $botIds = $room->players()->where('users.role', 'bot')->pluck('users.id');
+            $room->delete();
+            if ($botIds->isNotEmpty()) {
+                User::whereIn('id', $botIds)->delete();
+            }
+        });
+
+        return redirect()->route('findRoom')->with('success', 'Room deleted.');
+    }
 }

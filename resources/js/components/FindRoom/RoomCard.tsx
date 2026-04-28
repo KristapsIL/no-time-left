@@ -1,4 +1,6 @@
 import { router } from "@inertiajs/react";
+import { Trash2 } from "lucide-react";
+import { useState } from "react";
 
 type Room = {
   id: number;
@@ -16,7 +18,8 @@ type Room = {
 };
 
 // Vienas istabas kartīte istabas meklēšanas sarakstā
-export default function RoomCard({ room, currentUserId }: { room: Room; currentUserId?: number }) {
+export default function RoomCard({ room, currentUserId, isAdmin }: { room: Room; currentUserId?: number; isAdmin?: boolean }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const currentPlayers = room.players?.length || 0;
   const maxPlayers = room.rules.max_players;
   const gameStatus = room.game?.game_status;
@@ -26,6 +29,14 @@ export default function RoomCard({ room, currentUserId }: { room: Room; currentU
   const isGameFinished = gameStatus === 'finished';
   const isExistingPlayer = currentUserId && room.players?.some(player => player.id === currentUserId);
   const canJoin = isExistingPlayer || (!isRoomFull && !isGameActive && !isGameFinished);
+
+  function handleDelete() {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    router.delete(`/admin/rooms/${room.id}`);
+  }
 
   return (
     <div className={`rounded-2xl border bg-white/85 dark:bg-[#0d1621]/85 backdrop-blur shadow hover:shadow-lg transition p-4 flex flex-col justify-between ${
@@ -40,6 +51,22 @@ export default function RoomCard({ room, currentUserId }: { room: Room; currentU
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
             {room.room_name}
           </h2>
+          {/* Admin dzēšanas poga */}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              onBlur={() => setConfirmDelete(false)}
+              title={confirmDelete ? 'Click again to confirm' : 'Delete room'}
+              className={`ml-2 flex-shrink-0 rounded-lg p-1.5 transition ${
+                confirmDelete
+                  ? 'bg-red-600 text-white hover:bg-red-700'
+                  : 'text-zinc-400 hover:bg-red-500/15 hover:text-red-400'
+              }`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
         
         <p className="text-sm text-zinc-600 dark:text-zinc-300">

@@ -34,6 +34,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/joinroom/code/{code}', [RoomController::class, 'joinRoomByCode'])->name('joinRoomByCode');
     Route::get('/joinroom/{roomId}', [RoomController::class, 'joinRoom'])->name('joinRoom');
     Route::delete('/leaveroom/{roomId}', [RoomController::class, 'leaveRoom'])->name('leaveRoom');
+    Route::delete('/admin/rooms/{roomId}', [RoomController::class, 'destroy'])->name('admin.rooms.destroy');
     
     Route::post('/send-message', function(\Illuminate\Http\Request $request) {
         $request->validate([

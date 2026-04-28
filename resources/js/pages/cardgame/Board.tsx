@@ -437,7 +437,7 @@ export default function Board() {
 
         </div>
 
-        <div className="absolute right-2 md:right-3 bottom-2 md:bottom-3 z-40">
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 md:top-auto md:translate-y-0 md:right-3 md:bottom-3 z-40">
           {game.status !== 'waiting' && (
             <GameControls
               isChatOpen={isChatOpen}
