@@ -13,8 +13,9 @@ use Illuminate\Support\Facades\DB;
 
 class RoomController extends Controller
 {
-    // Atgriež istabas izveides lapu
+    // Atgriež istabas izveides React komponentu — lietotājs var konfigurēt noteikumus un izveidot jaunu istabu
     public function createRoom(){
+        // Renderē React lapu "CreateRoom" bez papildu props, jo forma pati par sevi ir patstāvīga un neizsauc datus
         return Inertia::render('cardgame/CreateRoom');
     }
 
@@ -114,14 +115,19 @@ class RoomController extends Controller
     }
     // Atrod publiskās istabas un nodod tās FindRoom lapai
     public function findRoom(){
-        // Nerrādam beigtās spēles un AI Duel istabas
+        // Ielādē saistītos datus: noteikumi, spēle, spēlētāji — efektīvai datu pasniegšanai uz front-end
+        // Filtrē pēc nosaukuma — neiekļauj "AI Duel" istabas (automātiski izveidotas ātrajām 1v1 duelem pret botu)
+        // Un filtrē pēc spēles statusa — rāda istabas, kurām NAV spēles, VAI kurām ir spēle bet tā NAV 'finished'
         $rooms = Room::with(['rules', 'game', 'players'])
             ->where('room_name', 'not like', 'AI Duel %')
             ->where(function ($q) {
+                // Ietver istabas bez spēles (tikai gaidīšanas stāvoklis)
                 $q->whereDoesntHave('game')
+                  // VAI istabas ar spēli, bet statuss nav 'finished' (aktīva vai pausēta)
                   ->orWhereHas('game', fn ($gq) => $gq->whereNotIn('game_status', ['finished']));
             })
             ->get();
+        // Nodod istabas React komponentei "FindRoom" kā masīvu ar pieejamajām istabām izmantojot Inertia
         return Inertia::render('cardgame/FindRoom', ['rooms' => $rooms]);
     }
 

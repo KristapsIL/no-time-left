@@ -312,23 +312,37 @@ export function useGameEngine({
 
   const playCard = useCallback(
     async (card: string) => {
+      // Pārbauda, vai ir spēlētāja gājiens un vai kārts ir derīga
       if (!isMyTurn || !isValidPlay(card, gameRef.current.topCard)) return;
+
+      // Saglabā pašreizējo spēles stāvokli, lai kļūmes gadījumā varētu atjaunot
       lastSnapshotRef.current = gameRef.current;
+
       const cur = gameRef.current;
       const idx = cur.hand.indexOf(card);
+
+      // Noņem izvēlēto kārti no spēlētāja rokas
       const nextHand = idx >= 0 ? [...cur.hand.slice(0, idx), ...cur.hand.slice(idx + 1)] : cur.hand;
+
+      // Saglabā iepriekšējo kāršu skaitu spēlētājam
+      const myCountBefore = cur.handCounts[uid] ?? cur.hand.length;
+
+      // Optimistiski atjauno spēles stāvokli lokāli (pirms servera apstiprināšana)
       dispatch({
         type: 'SERVER_SYNC',
         payload: {
           hand: nextHand,
           topCard: card,
-          handCounts: { ...cur.handCounts, [uid]: Math.max((cur.handCounts[uid] ?? cur.hand.length) - 1, 0) },
+          handCounts: { ...cur.handCounts, [uid]: Math.max(myCountBefore - 1, 0) },
         },
       });
+
       try {
+        // Nosūta informāciju serverim par nospēlēto kārti
         beginPlacement(card, 720, 'bottom');
         await playCardApi(room.id, card);
       } catch (err) {
+        // Ja serveris nereagē, atjauno iepriekšējo spēles stāvokli
         if (lastSnapshotRef.current) dispatch({ type: 'SERVER_SYNC', payload: lastSnapshotRef.current });
         toast.error((err as Error)?.message ?? 'Failed to play card.');
       }
