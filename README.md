@@ -1,12 +1,12 @@
 Instalācija
 
 1. Klonē repo:
-   git clone https://github.com/quakez/no-time-left.git
-   cd no-time-left
+   - git clone https://github.com/quakez/no-time-left.git
+   - cd no-time-left
 
 2. Instalē dependencies:
-   composer install
-   npm install
+   - composer install
+   - npm install
 
 3. Konfigurē .env:
    - Kopē .env.example uz .env
