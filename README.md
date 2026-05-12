@@ -19,18 +19,18 @@ Instalācija
      PUSHER_APP_CLUSTER=your_cluster
 
 4. Migrācijas un seeders:
-   php artisan migrate
-   php artisan db:seed
+   - php artisan migrate
+   - php artisan db:seed
 
 Palaist
 
 1. Start server:
-   php artisan serve
+   - php artisan serve
 
 2. Start frontend (dev mode):
-   npm run dev
+   - npm run dev
 
 3. Palaid arī queue worker reāllaika broadcastam:
-   php artisan queue:work
+   - php artisan queue:work
 
 4. Atver pārlūkprogrammā: http://localhost:8000
